@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skill Lifecycle Manager"
+  short_description: "审计并选择 Skill 的包、来源仓库或混合管理模式"
+  default_prompt: "审计或安装这个 Skill，按包安装、来源仓库或混合模式分类，保持单一实体并验证入口。"
