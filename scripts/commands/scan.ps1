@@ -19,6 +19,22 @@ function New-SkillRecord {
     $git = Get-GitFacts -Path $physicalPath                         # Git facts decide source ownership and immutable version evidence.
     $issues = [Collections.Generic.List[string]]::new()             # Extend structural issues with provenance uncertainty.
     foreach ($issue in $metadata.Issues) { $issues.Add($issue) }
+    $origin = $null                                                  # Installed PACKAGE provenance is optional for historical packages.
+    $packageRemote = $null
+    $packageCommit = $null
+    $originPath = Join-Path $physicalPath ".skill-lifecycle.json"
+    if (Test-Path -LiteralPath $originPath -PathType Leaf) {
+        try {
+            $originRecord = Get-Content -Raw -LiteralPath $originPath | ConvertFrom-Json
+            if ($originRecord.schemaVersion -ne 1 -or $originRecord.lifecycleMode -ne "PACKAGE") { throw "unsupported provenance schema" }
+            $origin = [string]$originRecord.origin                   # Preserve the installation input separately from a verified remote.
+            $packageRemote = if ($originRecord.remote) { [string]$originRecord.remote } else { $null }
+            $packageCommit = if ($originRecord.commit) { [string]$originRecord.commit } else { $null }
+        }
+        catch {
+            $issues.Add("Installed-package provenance is unreadable: $($_.Exception.Message)")
+        }
+    }
 
     $entryCount = 1                                                 # Package Skills have one observed activation entry by definition.
     $mode = "PACKAGE"                                              # No Git owner means the activity directory is the managed package.
@@ -43,10 +59,11 @@ function New-SkillRecord {
         lifecycleMode = $mode                                       # PACKAGE/SOURCE/HYBRID maintenance strategy.
         activePaths = @($ActivePath)                                # Aliases are merged by Invoke-SkillScan.
         physicalPath = $physicalPath                                # Resolved entity used for file identity and Git checks.
+        origin = $origin                                            # User-supplied package source, retained without a trust inference.
         sourceRepository = if ($git.IsRepository) { $git.Root } else { $null }
-        remote = $git.Remote                                        # Origin URL is evidence, not a trust verdict.
+        remote = if ($git.IsRepository) { $git.Remote } else { $packageRemote } # Origin URL is evidence, not a trust verdict.
         branch = $git.Branch                                        # Branch is an update channel, not the version pin.
-        commit = $git.Commit                                        # Full SHA is the local immutable version evidence.
+        commit = if ($git.IsRepository) { $git.Commit } else { $packageCommit } # Package manifest preserves a Git source pin.
         entryCount = $entryCount                                    # Multi-entry repositories classify as HYBRID.
         issues = @($issues)                                         # Concrete problems remain available to humans and automation.
     }
@@ -97,7 +114,7 @@ function Convert-RegistryToYAML {
     $lines.Add("skills:")
     foreach ($skill in $Registry.skills) {
         $lines.Add("  - name: $(ConvertTo-YAMLScalar $skill.name)")
-        foreach ($field in @("description", "status", "scope", "lifecycleMode", "physicalPath", "sourceRepository", "remote", "branch", "commit", "entryCount")) {
+        foreach ($field in @("description", "status", "scope", "lifecycleMode", "physicalPath", "origin", "sourceRepository", "remote", "branch", "commit", "entryCount")) {
             $lines.Add("    ${field}: $(ConvertTo-YAMLScalar $skill.$field)") # Quote every free-text or path field consistently.
         }
         $lines.Add("    activePaths:")

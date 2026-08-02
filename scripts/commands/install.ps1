@@ -86,7 +86,6 @@ function Install-SkillAsset {
         if ($resolvedMode -eq "AUTO") {
             $resolvedMode = if (-not $git.IsRepository) { "PACKAGE" } elseif ($entryCount -eq 1 -and $selectedRoot.TrimEnd("\") -eq $git.Root.TrimEnd("\")) { "SOURCE" } else { "HYBRID" }
         }
-        if ($resolvedMode -eq "PACKAGE" -and $git.IsRepository) { throw "BLOCKED: Package mode would discard Git provenance; use Source or Hybrid." }
         if ($resolvedMode -in @("SOURCE", "HYBRID") -and -not $git.IsRepository) { throw "BLOCKED: $resolvedMode mode requires a complete Git repository." }
         if ($resolvedMode -eq "SOURCE" -and ($entryCount -ne 1 -or $selectedRoot.TrimEnd("\") -ne $git.Root.TrimEnd("\"))) { throw "BLOCKED: Source mode requires one repository-root Skill; use Hybrid." }
 
@@ -118,8 +117,20 @@ function Install-SkillAsset {
 
         New-Item -ItemType Directory -Path $SkillHome -Force | Out-Null
         if ($resolvedMode -eq "PACKAGE") {
-            Copy-Item -LiteralPath $selectedRoot -Destination $activityPath -Recurse # One physical package becomes the activity entity.
+            New-Item -ItemType Directory -Path $activityPath | Out-Null # Create the transaction-owned package root before copying contents.
             $createdPaths.Add($activityPath)
+            Get-ChildItem -Force -LiteralPath $selectedRoot | Where-Object Name -ne ".git" | Copy-Item -Destination $activityPath -Recurse -Force # Package mode deliberately omits repository metadata.
+            $originRecord = [pscustomobject]@{
+                schemaVersion = 1                                  # Scanner validates this small installed-package provenance contract.
+                lifecycleMode = "PACKAGE"
+                origin = $Source                                    # Retain the user-supplied local path or Git URL without claiming trust.
+                remote = $git.Remote                                # Git origin is recorded when the inspected source provides one.
+                commit = $git.Commit                                # Full SHA pins the package source snapshot when Git is available.
+                selectedSkillPath = [IO.Path]::GetRelativePath($inspection.Root, $selectedRoot)
+                installedAt = (Get-Date).ToString("o")
+            }
+            $originPath = Join-Path $activityPath ".skill-lifecycle.json"
+            Write-AtomicText -Path $originPath -Content (($originRecord | ConvertTo-Json -Depth 6) + "`n") -OwnerRoot $activityPath # Provenance travels with the copied package.
         }
         else {
             New-Item -ItemType Directory -Path $SourceHome -Force | Out-Null

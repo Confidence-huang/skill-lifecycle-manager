@@ -91,6 +91,20 @@ try {
     $installResult = Install-SkillAsset -Source $installSource -Mode Package -SkillHome $skillHome -SourceHome $sourceHome -StagingHome $stagingHome -RegistryDirectory $registryRoot -Apply
     Assert-Test ($installResult.action -eq "INSTALLED") "Package apply did not complete."
 
+    $gitPackageRoot = Join-Path $testRoot "incoming\git-package-one"
+    New-TestSkill -Root $gitPackageRoot -Name "git-package-one"
+    & git -C $gitPackageRoot init -b main | Out-Null
+    & git -C $gitPackageRoot config user.name "Skill Lifecycle Test"
+    & git -C $gitPackageRoot config user.email "skill-lifecycle-test@example.invalid"
+    Save-TestRepository -Repository $gitPackageRoot
+    $gitPackageCommit = ((& git -C $gitPackageRoot rev-parse HEAD) -join "").Trim()
+    $gitPackageInstall = Install-SkillAsset -Source $gitPackageRoot -Mode Package -SkillHome $skillHome -SourceHome $sourceHome -StagingHome $stagingHome -RegistryDirectory $registryRoot -Apply
+    $gitPackageOrigin = Get-Content -Raw -LiteralPath (Join-Path $skillHome "git-package-one\.skill-lifecycle.json") | ConvertFrom-Json
+    Assert-Test ($gitPackageInstall.action -eq "INSTALLED" -and $gitPackageOrigin.commit -eq $gitPackageCommit) "Git-backed package did not preserve its full source commit."
+    $packageRegistry = Get-Content -Raw -LiteralPath (Join-Path $registryRoot "skills-registry.json") | ConvertFrom-Json
+    $gitPackageRegistryRecord = @($packageRegistry.skills | Where-Object name -eq "git-package-one")
+    Assert-Test (@($gitPackageRegistryRecord | Where-Object { $_.lifecycleMode -eq "PACKAGE" -and $_.commit -eq $gitPackageCommit }).Count -eq 1) "Registry did not expose Git-backed PACKAGE provenance: $($gitPackageRegistryRecord | ConvertTo-Json -Compress -Depth 5)"
+
     $sourceInstall = Install-SkillAsset -Source $sourceRoot -Mode Source -SkillHome $skillHome -SourceHome $sourceHome -StagingHome $stagingHome -RegistryDirectory $registryRoot -Apply
     Assert-Test ($sourceInstall.action -eq "INSTALLED" -and (Get-Item -Force -LiteralPath (Join-Path $skillHome "source-one")).LinkType -eq "Junction") "Source install did not create one source clone and activity junction."
     $hybridInstall = Install-SkillAsset -Source $hybridRoot -Mode Hybrid -SkillPath "skills\hybrid-a" -SkillHome $skillHome -SourceHome $sourceHome -StagingHome $stagingHome -RegistryDirectory $registryRoot -Apply
@@ -136,7 +150,7 @@ try {
 
     $suiteResult = [pscustomobject]@{
         status = "PASS"                                            # Every public v1.0 capability completed against isolated fixtures.
-        tests = 18
+        tests = 20
         classifications = $registry.summary.lifecycleMode
         updatedFrom = $beforeUpdate
         updatedTo = $afterUpdate

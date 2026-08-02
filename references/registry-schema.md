@@ -24,6 +24,7 @@ The JSON Registry is the canonical machine-readable state. The YAML file beside 
 | `lifecycleMode` | `PACKAGE`, `SOURCE`, `HYBRID`, or `UNKNOWN`. |
 | `activePaths` | Every scanned activation path that resolves to the same physical entry. |
 | `physicalPath` | Resolved Skill directory used for file and Git checks. |
+| `origin` | User-supplied installation source recorded by a managed PACKAGE; otherwise null. |
 | `sourceRepository` | Git top-level directory for SOURCE/HYBRID assets; otherwise null. |
 | `remote` | Git origin URL when available. |
 | `branch` | Current local branch when available. |
