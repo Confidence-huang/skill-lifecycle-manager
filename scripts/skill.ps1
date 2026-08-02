@@ -7,7 +7,7 @@ Call example: pwsh -NoProfile -File .\skill.ps1 -Command registry -Apply
 
 [CmdletBinding()]
 param(
-    [ValidateSet("help", "scan", "registry", "report", "governance", "install", "update", "backup", "restore")]
+    [ValidateSet("help", "scan", "registry", "report", "governance", "stabilize", "health", "install", "update", "backup", "restore")]
     [string]$Command = "help",                                     # One explicit lifecycle action per invocation.
     [string[]]$Path,                                                # Scan or backup roots; defaults depend on the command.
     [string]$ProjectRoot,                                           # Optional project-local Skill discovery root.
@@ -32,6 +32,7 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path       # Resolve re
 . (Join-Path $scriptRoot "skill-state.ps1")                         # Load shared identity, Git, path, and atomic-write rules.
 . (Join-Path $scriptRoot "commands\governance.ps1")                # Load capability taxonomy, evidence readiness, and governance report.
 . (Join-Path $scriptRoot "commands\scan.ps1")                      # Load discovery, classification, and Registry output.
+. (Join-Path $scriptRoot "commands\stability.ps1")                 # Load stable-baseline capture and read-only routine health.
 . (Join-Path $scriptRoot "commands\report.ps1")                    # Load the human-facing count and collision report.
 . (Join-Path $scriptRoot "commands\install.ps1")                   # Load transactional package/source/hybrid installation.
 . (Join-Path $scriptRoot "commands\update.ps1")                    # Load fetch, candidate validation, and fast-forward update.
@@ -45,7 +46,7 @@ try {
         "help" {
             [pscustomobject]@{
                 status = "PASS"                                    # Help is a read-only successful command.
-                commands = @("scan", "registry", "report", "governance", "install", "update", "backup", "restore")
+                commands = @("scan", "registry", "report", "governance", "stabilize", "health", "install", "update", "backup", "restore")
                 applyRule = "Preview by default; add -Apply for final writes."
                 registry = $RegistryDirectory
             }
@@ -62,6 +63,16 @@ try {
         "governance" {
             $governanceRegistry = Invoke-SkillScan -Paths $Path -ProjectRoot $ProjectRoot -RegistryDirectory $RegistryDirectory -WriteRegistry:$Apply # Refresh live evidence before deriving policy suggestions.
             Write-SkillGovernanceReport -Registry $governanceRegistry -RegistryDirectory $RegistryDirectory -Apply:$Apply
+        }
+        "stabilize" {
+            $managerRoot = Split-Path -Parent $scriptRoot           # Source repository owns scripts/, references/, and Skill metadata.
+            $managerActivity = Join-Path $SkillHome "skill-lifecycle-manager"
+            Save-SkillStabilityBaseline -RegistryDirectory $RegistryDirectory -BackupRoot $BackupRoot -ManagerRoot $managerRoot -ActivityPath $managerActivity -Apply:$Apply
+        }
+        "health" {
+            $managerRoot = Split-Path -Parent $scriptRoot           # Routine checks compare the running code to its frozen Git identity.
+            $managerActivity = Join-Path $SkillHome "skill-lifecycle-manager"
+            Get-SkillHealth -RegistryDirectory $RegistryDirectory -BackupRoot $BackupRoot -ManagerRoot $managerRoot -ActivityPath $managerActivity -ProjectRoot $ProjectRoot
         }
         "install" {
             if (-not $Source) { throw "BLOCKED: install requires -Source." }

@@ -1,6 +1,6 @@
 ---
 name: skill-lifecycle-manager
-description: Manage and govern the complete lifecycle of Codex and cross-agent Skills on Windows with PowerShell 7. Use when Codex needs to inventory or classify Skills, generate the canonical Skill Registry, build an evidence-backed capability graph, measure governance evidence without inventing quality or usage scores, install a local or Git-backed Skill, update source-managed Skills through candidate validation, create an AI capability backup, or restore into an empty destination. Distinguishes asset scope, lifecycle mode, observed governance state, and unknown assessment evidence.
+description: Manage and govern the complete lifecycle of Codex and cross-agent Skills on Windows with PowerShell 7. Use when Codex needs to inventory or classify Skills, generate the canonical Skill Registry, build an evidence-backed capability graph, freeze a verified stable-use baseline, run a read-only AI capability health check, validate a project's declared Skill working set, install or update a managed Skill, create a capability backup, or restore into an empty destination. Distinguishes asset scope, lifecycle mode, observed governance state, and unknown assessment evidence without inventing quality or usage scores.
 ---
 
 # Skill Lifecycle Manager
@@ -24,6 +24,7 @@ Keep two classifications separate:
 8. Pin Git-backed installations to the resolved full commit SHA. A branch is only an update channel.
 9. Update with `fetch -> compare -> detached candidate validation -> fast-forward`, never with an unchecked `git pull`.
 10. Keep backup and restore targets explicit. Restore only into an empty destination.
+11. After Phase 2 is verified, prefer stable-use observation over immediate Registry redesign or automatic routing.
 
 ## Command entry
 
@@ -81,6 +82,29 @@ pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command governance -Appl
 ```
 
 Governance never fabricates A/B grades. `evidenceReadinessScore` covers only metadata, activation, maintenance mode, provenance, and collision evidence. Quality, usage, and security remain `UNKNOWN` until real evaluation, telemetry, and audits exist. Read [references/governance.md](references/governance.md) before using governance fields for decisions.
+
+## Stabilize and check health
+
+Preview and freeze the current verified local baseline:
+
+```powershell
+pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command stabilize
+pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command stabilize -Apply
+```
+
+Run the daily or weekly read-only check:
+
+```powershell
+pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command health
+```
+
+Validate one real project's declared working set:
+
+```powershell
+pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command health -ProjectRoot "D:\CodexProjects\Project_25 学习东西"
+```
+
+The stability baseline records local commits, Registry/report hashes, activity identity, and the latest complete backup. Health performs no writes and no remote fetch, so upstream freshness remains `UNKNOWN_NOT_FETCHED`. Project tiers are role labels only; they do not change discovery or imply quality. Read [references/stability.md](references/stability.md) before freezing or interpreting health output.
 
 ## Install
 
@@ -165,3 +189,4 @@ After any implementation or environment change:
 4. Confirm the activity path is a junction to the clean source repository.
 5. Confirm Codex discovery returns `skill-lifecycle-manager` exactly once.
 6. Review the exact Git diff, stage only this Skill's files, and commit the verified atomic change.
+7. After committing a stable-use change, run `stabilize -Apply` once and confirm `health` passes against the committed manager HEAD.

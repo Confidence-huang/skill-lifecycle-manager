@@ -1,5 +1,5 @@
 <#
-End-to-end fixture tests for scan, Registry, package install, source update, backup, and restore.
+End-to-end fixture tests for scan, Registry, stability, health, install, update, backup, and restore.
 Every artifact lives under one uniquely named temporary root and is removed in a final cleanup block.
 Call example: pwsh -NoProfile -File .\test-skill.ps1
 #>
@@ -12,6 +12,7 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $scriptRoot "skill-state.ps1")                         # Test the same shared functions loaded by the CLI.
 . (Join-Path $scriptRoot "commands\governance.ps1")
 . (Join-Path $scriptRoot "commands\scan.ps1")
+. (Join-Path $scriptRoot "commands\stability.ps1")
 . (Join-Path $scriptRoot "commands\report.ps1")
 . (Join-Path $scriptRoot "commands\install.ps1")
 . (Join-Path $scriptRoot "commands\update.ps1")
@@ -176,6 +177,7 @@ try {
     $allUpdateResults = @(Update-SkillAsset -Name "all" -RegistryDirectory $registryRoot -StagingHome $stagingHome -Apply)
     Assert-Test (@($allUpdateResults | Where-Object { $_.name -eq "update-one" -and $_.action -eq "CURRENT" }).Count -eq 1) "Batch update did not continue to the clean repository."
     Assert-Test (@($allUpdateResults | Where-Object { $_.name -eq "update-blocked" -and $_.status -eq "BLOCKED" -and $_.action -eq "SKIPPED" }).Count -eq 1) "Batch update did not isolate the dirty repository."
+    $null = Invoke-SkillScan -Paths @($updateHome) -RegistryDirectory $registryRoot -WriteRegistry # Batch update refreshes default live roots; restore the isolated fixture inventory before stability tests.
 
     $backupRoot = Join-Path $testRoot "backups"
     $backupResult = Backup-AICapabilities -Paths @($skillHome, $registryRoot, $updateHome) -BackupRoot $backupRoot -Apply
@@ -191,9 +193,33 @@ try {
     $restoreResult = Restore-AICapabilities -BackupPath $backupResult.destination -DestinationRoot $restoreRoot -Apply
     Assert-Test ($restoreResult.action -eq "RESTORED") "Restore apply did not complete."
 
+    $managerRoot = Join-Path $sourceHome "source-one"              # Clean source fixture stands in for the manager repository.
+    $managerActivity = Join-Path $skillHome "source-one"           # Existing junction proves single-source activation.
+    $stabilityPreview = Save-SkillStabilityBaseline -RegistryDirectory $registryRoot -BackupRoot $backupRoot -ManagerRoot $managerRoot -ActivityPath $managerActivity
+    Assert-Test ($stabilityPreview.action -eq "PREVIEW" -and -not (Test-Path -LiteralPath (Join-Path $registryRoot "skill-stability-baseline.json"))) "Stability preview unexpectedly wrote the baseline."
+    $stabilityResult = Save-SkillStabilityBaseline -RegistryDirectory $registryRoot -BackupRoot $backupRoot -ManagerRoot $managerRoot -ActivityPath $managerActivity -Apply
+    Assert-Test ($stabilityResult.action -eq "STABILIZED" -and (Test-Path -LiteralPath $stabilityResult.baselinePath)) "Stable baseline was not written."
+    $stabilityManifest = Get-Content -Raw -LiteralPath $stabilityResult.baselinePath | ConvertFrom-Json
+    Assert-Test ($stabilityManifest.operatingMode -eq "FROZEN_STABLE_USE" -and -not $stabilityManifest.boundaries.automaticUpdate -and -not $stabilityManifest.boundaries.phase3Routing) "Stable-use boundaries were not frozen explicitly."
+
+    $projectRoot = Join-Path $testRoot "project"
+    New-Item -ItemType Directory -Path $projectRoot -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $projectRoot "PROJECT_LOG.md") -Value "# Project Log" -Encoding utf8
+    $projectProfile = [ordered]@{ schemaVersion = 1; projectName = "Fixture"; inherits = [ordered]@{ globalBaseline = $stabilityResult.baselinePath; continuity = "PROJECT_LOG.md" }; workingSet = [ordered]@{ CORE_WORKFLOW = @("update-one"); ON_DEMAND = @("update-blocked") }; boundaries = [ordered]@{ labelsOnly = $true; automaticRouting = $false; automaticDeletion = $false } }
+    Set-Content -LiteralPath (Join-Path $projectRoot "project-skill-profile.json") -Value (($projectProfile | ConvertTo-Json -Depth 6) + "`n") -Encoding utf8
+    $health = Get-SkillHealth -RegistryDirectory $registryRoot -BackupRoot $backupRoot -ManagerRoot $managerRoot -ActivityPath $managerActivity -ProjectRoot $projectRoot
+    Assert-Test ($health.status -eq "PASS" -and $health.action -eq "HEALTH_CHECKED" -and $health.mutations -eq 0) "Read-only health did not pass against the frozen fixture: $($health | ConvertTo-Json -Depth 10 -Compress)"
+    Assert-Test ($health.project.status -eq "PASS" -and $health.project.declaredSkills -eq 2) "Project working-set inheritance was not validated."
+    Assert-Test ($health.upstreamFreshness -eq "UNKNOWN_NOT_FETCHED") "Local health invented an upstream freshness conclusion."
+
+    Set-Content -LiteralPath (Join-Path $managerRoot "local-drift.txt") -Value "fixture drift" -Encoding utf8
+    $driftHealth = Get-SkillHealth -RegistryDirectory $registryRoot -BackupRoot $backupRoot -ManagerRoot $managerRoot -ActivityPath $managerActivity
+    Assert-Test ($driftHealth.status -eq "BLOCKED") "Manager or local source drift was not detected."
+    Remove-Item -LiteralPath (Join-Path $managerRoot "local-drift.txt")
+
     $suiteResult = [pscustomobject]@{
         status = "PASS"                                            # Every public v1.0 capability completed against isolated fixtures.
-        tests = 37
+        tests = 44
         classifications = $registry.summary.lifecycleMode
         updatedFrom = $beforeUpdate
         updatedTo = $afterUpdate

@@ -1,4 +1,4 @@
 interface:
   display_name: "Skill Lifecycle Manager"
-  short_description: "Inventory, govern, update, and back up Skill assets"
-  default_prompt: "Use $skill-lifecycle-manager to classify Skill assets, distinguish physical entries from visible activations, maintain the canonical Registry, generate evidence-backed capability governance without inventing usage or quality, and perform a previewed report, install, update, backup, or restore operation."
+  short_description: "Inventory, stabilize, check, and govern Skill assets"
+  default_prompt: "Use $skill-lifecycle-manager to inspect Skill assets, maintain evidence-backed governance, freeze or health-check a stable baseline, and perform only the explicitly requested lifecycle operation."
