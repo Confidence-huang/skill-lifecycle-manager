@@ -83,6 +83,9 @@ try {
     Assert-Test ($registry.summary.total -eq 4) "Scan should discover four eligible physical Skills."
     Assert-Test ($registry.summary.inventory.physicalEntries -eq 4 -and $registry.summary.inventory.uniqueNames -eq 4) "Inventory views should distinguish physical entries from exact names."
     Assert-Test ($registry.summary.inventory.topLevelEntries -eq 2 -and $registry.summary.inventory.nestedEntries -eq 2) "Inventory should distinguish top-level entries from nested repository Skills."
+    $scopeVariant = $registry | ConvertTo-Json -Depth 12 | ConvertFrom-Json
+    foreach ($record in $scopeVariant.skills) { $record.scope = "SYSTEM"; $record.governanceState = "SYSTEM_MANAGED" }
+    Assert-Test ((Get-SkillInventoryFingerprint -Registry $registry) -eq (Get-SkillInventoryFingerprint -Registry $scopeVariant)) "Physical inventory fingerprint should ignore ownership labels that explicit-root scans cannot reconstruct."
     $governedPackage = @($registry.skills | Where-Object name -eq "package-one")[0]
     Assert-Test ($governedPackage.isTopLevel -and $governedPackage.governanceState -eq "AVAILABLE") "Top-level PASS package should remain available."
     Assert-Test ($governedPackage.capabilityDomains -contains "documents-presentations" -and $governedPackage.capabilityEvidence.Count -gt 0) "Lexical capability classification did not retain its evidence."
@@ -219,7 +222,7 @@ try {
 
     $suiteResult = [pscustomobject]@{
         status = "PASS"                                            # Every public v1.0 capability completed against isolated fixtures.
-        tests = 44
+        tests = 45
         classifications = $registry.summary.lifecycleMode
         updatedFrom = $beforeUpdate
         updatedTo = $afterUpdate

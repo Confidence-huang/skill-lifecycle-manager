@@ -15,7 +15,7 @@ The command creates `skill-stability-baseline.json` beside the canonical Registr
 
 - the clean manager commit and activity junction;
 - canonical Registry and generated-report hashes;
-- a deterministic physical-inventory fingerprint;
+- a deterministic physical-inventory fingerprint; Registry-file hashes separately protect scope and governance labels;
 - local commits and status fingerprints for SOURCE/HYBRID repositories;
 - the newest complete version-1 backup manifest;
 - explicit stable-use boundaries that keep automatic install, update, deletion, grading, and Phase 3 routing disabled.

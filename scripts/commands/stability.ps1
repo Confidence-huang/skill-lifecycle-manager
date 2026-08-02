@@ -22,22 +22,20 @@ function Get-TextSHA256 {
 }
 
 
-# --- Reduce one Registry to a stable live-inventory fingerprint ---
+# --- Reduce one Registry to a stable physical-inventory fingerprint ---
 function Get-SkillInventoryFingerprint {
-    param([Parameter(Mandatory)][object]$Registry)                   # Generated timestamps are deliberately excluded from identity.
+    param([Parameter(Mandatory)][object]$Registry)                   # Generated timestamps and scan-root ownership labels are excluded.
 
     $facts = @($Registry.skills | Sort-Object physicalPath, name | ForEach-Object {
         [ordered]@{
             name = $_.name                                         # Exact frontmatter name detects additions and renames.
             physicalPath = $_.physicalPath                         # Physical identity detects moved or replaced entries.
             status = $_.status                                     # Structural evidence drift belongs in routine health.
-            scope = $_.scope                                       # Ownership changes can alter update authority.
             lifecycleMode = $_.lifecycleMode                       # PACKAGE/SOURCE/HYBRID changes affect maintenance.
             commit = $_.commit                                     # Full Git SHA is the immutable source version.
-            governanceState = $_.governanceState                   # Observed lifecycle state is retained without quality grading.
         }
     })
-    return Get-TextSHA256 -Text ($facts | ConvertTo-Json -Depth 5 -Compress) # One digest makes canonical/live comparison cheap.
+    return Get-TextSHA256 -Text ($facts | ConvertTo-Json -Depth 5 -Compress) # Registry-file hashes separately protect scope and governance fields.
 }
 
 
