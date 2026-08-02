@@ -106,6 +106,10 @@ function Convert-RegistryToYAML {
     foreach ($root in $Registry.roots) { $lines.Add("  - $(ConvertTo-YAMLScalar $root)") }
     $lines.Add("summary:")
     $lines.Add("  total: $($Registry.summary.total)")
+    $lines.Add("  inventory:")
+    foreach ($property in $Registry.summary.inventory.PSObject.Properties) {
+        $lines.Add("    $($property.Name): $($property.Value)")    # Inventory names make the counting unit explicit in the mirror.
+    }
     foreach ($groupName in @("status", "scope", "lifecycleMode")) {
         $lines.Add("  ${groupName}:")
         $group = $Registry.summary.$groupName                       # Summary keys are controlled enum values from the scanner.
@@ -171,8 +175,31 @@ function Invoke-SkillScan {
         }
     }
 
+    $allNameGroups = @($records | Group-Object name)               # Name identity is a separate view from physical file identity.
+    $activationAliasCount = (@($records | ForEach-Object { [math]::Max(0, @($_.activePaths).Count - 1) }) | Measure-Object -Sum).Sum
+    $topLevelIdentities = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($record in $records) {
+        foreach ($activePath in $record.activePaths) {
+            foreach ($root in $rootRecords.Path) {
+                $rootPrefix = $root.TrimEnd("\") + "\"         # Prefix comparison prevents a sibling root from matching by text alone.
+                if (-not $activePath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) { continue }
+                $relative = [IO.Path]::GetRelativePath($root, $activePath)
+                if (@($relative -split "[\\/]").Count -eq 1) { $null = $topLevelIdentities.Add($record.physicalPath) }
+            }
+        }
+    }
+    $sameNamePhysicalExtras = (@($nameGroups | ForEach-Object { $_.Count - 1 }) | Measure-Object -Sum).Sum
     $summary = [pscustomobject]@{
-        total = $records.Count                                      # Total is deduplicated by physical entry identity.
+        total = $records.Count                                      # Compatibility alias: this means physical entries, never UI rows.
+        inventory = [pscustomobject]@{
+            physicalEntries = $records.Count                        # Deduplicated resolved SKILL.md entities across all scanned roots.
+            uniqueNames = $allNameGroups.Count                      # Frontmatter names collapse only exact name matches.
+            topLevelEntries = $topLevelIdentities.Count             # Direct children of a scanned activation root.
+            nestedEntries = $records.Count - $topLevelIdentities.Count # Sub-Skills, system internals, and plugin-contained entries.
+            activationAliases = [int]$activationAliasCount         # Extra paths already removed from physicalEntries.
+            nameCollisionGroups = $nameGroups.Count                 # Same name mapped to more than one physical entity.
+            sameNamePhysicalExtras = [int]$sameNamePhysicalExtras  # Physical records beyond one representative per collided name.
+        }
         status = [pscustomobject]@{ PASS = @($records | Where-Object status -eq "PASS").Count; BLOCKED = @($records | Where-Object status -eq "BLOCKED").Count; UNKNOWN = @($records | Where-Object status -eq "UNKNOWN").Count }
         scope = [pscustomobject]@{ SYSTEM = @($records | Where-Object scope -eq "SYSTEM").Count; USER = @($records | Where-Object scope -eq "USER").Count; PROJECT = @($records | Where-Object scope -eq "PROJECT").Count; UNKNOWN = @($records | Where-Object scope -eq "UNKNOWN").Count }
         lifecycleMode = [pscustomobject]@{ PACKAGE = @($records | Where-Object lifecycleMode -eq "PACKAGE").Count; SOURCE = @($records | Where-Object lifecycleMode -eq "SOURCE").Count; HYBRID = @($records | Where-Object lifecycleMode -eq "HYBRID").Count; UNKNOWN = @($records | Where-Object lifecycleMode -eq "UNKNOWN").Count }
@@ -180,7 +207,7 @@ function Invoke-SkillScan {
     $registry = [pscustomobject]@{
         schemaVersion = 1                                          # Increment only when field semantics become incompatible.
         generatedAt = (Get-Date).ToString("o")                      # Local offset is retained for cross-session evidence.
-        generator = "skill-lifecycle-manager/1.0.0"                # Generator version lets future migrations identify behavior.
+        generator = "skill-lifecycle-manager/1.1.0"                # Version 1.1 adds explicit human-facing inventory units.
         roots = @($rootRecords.Path | Sort-Object -Unique)          # Record exactly which live surfaces were inspected.
         summary = $summary                                          # Compact health and classification counts.
         skills = $records                                           # Full evidence records remain the Registry source of truth.

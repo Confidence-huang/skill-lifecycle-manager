@@ -1,4 +1,4 @@
 interface:
   display_name: "Skill Lifecycle Manager"
-  short_description: "Inventory, install, update, and back up Skill assets"
-  default_prompt: "Use $skill-lifecycle-manager to classify Skill assets, maintain the canonical Registry, and perform a previewed install, update, backup, or restore operation."
+  short_description: "Inventory, explain, update, and back up Skill assets"
+  default_prompt: "Use $skill-lifecycle-manager to classify Skill assets, distinguish physical entries from visible activations, maintain the canonical Registry, and perform a previewed report, install, update, backup, or restore operation."

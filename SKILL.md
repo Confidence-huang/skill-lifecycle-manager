@@ -5,7 +5,7 @@ description: Manage the complete lifecycle of Codex and cross-agent Skills on Wi
 
 # Skill Lifecycle Manager
 
-Manage Skill assets as a small software supply chain instead of treating every `SKILL.md` as a copied folder.
+Manage Skill assets as a small software supply chain instead of treating every `SKILL.md` as a copied folder. Keep physical inventory counts separate from top-level Agent entries and Codex Desktop display rows.
 
 Keep two classifications separate:
 
@@ -57,6 +57,14 @@ D:\CodexProjects\_skills\registry\skills-registry.yaml
 ```
 
 The JSON file is canonical. The YAML file is a generated mirror and must not be edited independently. Read [references/registry-schema.md](references/registry-schema.md) before consuming fields programmatically.
+
+Generate the human-facing count and collision report after the Registry is current:
+
+```powershell
+pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command report -Apply
+```
+
+The report explains physical entries, exact names, top-level activations, nested Skills, aliases, and collisions. It does not claim that the physical count equals the Codex Desktop list size.
 
 ## Install
 

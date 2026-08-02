@@ -11,6 +11,7 @@ $ErrorActionPreference = "Stop"                                    # One failed 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $scriptRoot "skill-state.ps1")                         # Test the same shared functions loaded by the CLI.
 . (Join-Path $scriptRoot "commands\scan.ps1")
+. (Join-Path $scriptRoot "commands\report.ps1")
 . (Join-Path $scriptRoot "commands\install.ps1")
 . (Join-Path $scriptRoot "commands\update.ps1")
 . (Join-Path $scriptRoot "commands\backup.ps1")
@@ -74,11 +75,17 @@ try {
     $registryRoot = Join-Path $testRoot "registry"
     $registry = Invoke-SkillScan -Paths @($scanRoot) -RegistryDirectory $registryRoot -WriteRegistry
     Assert-Test ($registry.summary.total -eq 4) "Scan should discover four eligible physical Skills."
+    Assert-Test ($registry.summary.inventory.physicalEntries -eq 4 -and $registry.summary.inventory.uniqueNames -eq 4) "Inventory views should distinguish physical entries from exact names."
+    Assert-Test ($registry.summary.inventory.topLevelEntries -eq 2 -and $registry.summary.inventory.nestedEntries -eq 2) "Inventory should distinguish top-level entries from nested repository Skills."
     Assert-Test (@($registry.skills | Where-Object { $_.name -eq "package-one" -and $_.lifecycleMode -eq "PACKAGE" }).Count -eq 1) "Package classification failed."
     Assert-Test (@($registry.skills | Where-Object { $_.name -eq "source-one" -and $_.lifecycleMode -eq "SOURCE" }).Count -eq 1) "Source classification failed."
     Assert-Test (@($registry.skills | Where-Object { $_.name -like "hybrid-*" -and $_.lifecycleMode -eq "HYBRID" }).Count -eq 2) "Hybrid classification failed."
     Assert-Test (Test-Path -LiteralPath (Join-Path $registryRoot "skills-registry.json")) "Canonical JSON Registry was not written."
     Assert-Test (Test-Path -LiteralPath (Join-Path $registryRoot "skills-registry.yaml")) "YAML Registry mirror was not written."
+    $reportPreview = Write-SkillCapabilityReport -RegistryDirectory $registryRoot
+    Assert-Test ($reportPreview.action -eq "PREVIEW" -and -not (Test-Path -LiteralPath $reportPreview.reportPath)) "Report preview unexpectedly wrote a file."
+    $reportResult = Write-SkillCapabilityReport -RegistryDirectory $registryRoot -Apply
+    Assert-Test ($reportResult.action -eq "REPORTED" -and (Test-Path -LiteralPath $reportResult.reportPath)) "Capability report was not generated."
 
     $installSource = Join-Path $testRoot "incoming\installed-package"
     New-TestSkill -Root $installSource -Name "installed-package"
@@ -154,7 +161,7 @@ try {
 
     $suiteResult = [pscustomobject]@{
         status = "PASS"                                            # Every public v1.0 capability completed against isolated fixtures.
-        tests = 21
+        tests = 25
         classifications = $registry.summary.lifecycleMode
         updatedFrom = $beforeUpdate
         updatedTo = $afterUpdate

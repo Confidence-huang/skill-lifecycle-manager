@@ -7,7 +7,7 @@ Call example: pwsh -NoProfile -File .\skill.ps1 -Command registry -Apply
 
 [CmdletBinding()]
 param(
-    [ValidateSet("help", "scan", "registry", "install", "update", "backup", "restore")]
+    [ValidateSet("help", "scan", "registry", "report", "install", "update", "backup", "restore")]
     [string]$Command = "help",                                     # One explicit lifecycle action per invocation.
     [string[]]$Path,                                                # Scan or backup roots; defaults depend on the command.
     [string]$ProjectRoot,                                           # Optional project-local Skill discovery root.
@@ -31,6 +31,7 @@ $ErrorActionPreference = "Stop"                                    # Dispatch st
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path       # Resolve resources relative to this installed Skill.
 . (Join-Path $scriptRoot "skill-state.ps1")                         # Load shared identity, Git, path, and atomic-write rules.
 . (Join-Path $scriptRoot "commands\scan.ps1")                      # Load discovery, classification, and Registry output.
+. (Join-Path $scriptRoot "commands\report.ps1")                    # Load the human-facing count and collision report.
 . (Join-Path $scriptRoot "commands\install.ps1")                   # Load transactional package/source/hybrid installation.
 . (Join-Path $scriptRoot "commands\update.ps1")                    # Load fetch, candidate validation, and fast-forward update.
 . (Join-Path $scriptRoot "commands\backup.ps1")                    # Load physical-file backup and link recording.
@@ -43,7 +44,7 @@ try {
         "help" {
             [pscustomobject]@{
                 status = "PASS"                                    # Help is a read-only successful command.
-                commands = @("scan", "registry", "install", "update", "backup", "restore")
+                commands = @("scan", "registry", "report", "install", "update", "backup", "restore")
                 applyRule = "Preview by default; add -Apply for final writes."
                 registry = $RegistryDirectory
             }
@@ -53,6 +54,9 @@ try {
         }
         "registry" {
             Invoke-SkillScan -Paths $Path -ProjectRoot $ProjectRoot -RegistryDirectory $RegistryDirectory -WriteRegistry:$Apply
+        }
+        "report" {
+            Write-SkillCapabilityReport -RegistryDirectory $RegistryDirectory -Apply:$Apply
         }
         "install" {
             if (-not $Source) { throw "BLOCKED: install requires -Source." }

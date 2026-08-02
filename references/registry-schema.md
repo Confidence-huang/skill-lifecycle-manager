@@ -10,7 +10,7 @@ The JSON Registry is the canonical machine-readable state. The YAML file beside 
 | `generatedAt` | ISO 8601 timestamp for the completed scan. |
 | `generator` | Skill and script version that created the file. |
 | `roots` | Existing activation roots included in the scan. |
-| `summary` | Counts by verification status, asset scope, and lifecycle mode. |
+| `summary` | Explicit inventory units plus counts by verification status, asset scope, and lifecycle mode. |
 | `skills` | Deduplicated Skill asset records. |
 
 ## Skill fields
@@ -31,6 +31,20 @@ The JSON Registry is the canonical machine-readable state. The YAML file beside 
 | `commit` | Full local commit SHA when available. |
 | `entryCount` | Eligible `SKILL.md` entries in the containing Git repository. |
 | `issues` | Exact reasons for `BLOCKED` or `UNKNOWN`, never hidden behind a generic health score. |
+
+## Inventory count fields
+
+`summary.total` remains a compatibility alias for `summary.inventory.physicalEntries`; it never means Codex Desktop rows.
+
+| Field | Meaning |
+|---|---|
+| `physicalEntries` | Resolved physical `SKILL.md` entities after junction aliases are deduplicated. |
+| `uniqueNames` | Exact frontmatter names; no semantic-equivalence inference is made. |
+| `topLevelEntries` | Entries directly below a scanned activation root. |
+| `nestedEntries` | Entries nested inside parent Skills, system directories, or plugin packages. |
+| `activationAliases` | Extra discovery paths already excluded from `physicalEntries`. |
+| `nameCollisionGroups` | Names backed by more than one physical entity. |
+| `sameNamePhysicalExtras` | Physical entries beyond one representative per collision name. |
 
 ## Identity and duplicate rules
 
