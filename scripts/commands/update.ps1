@@ -74,37 +74,55 @@ function Update-SkillAsset {
     $repositories = @($selected | Group-Object sourceRepository | ForEach-Object { $_.Group[0] }) # Update each physical repository once.
     $results = [Collections.Generic.List[object]]::new()
     foreach ($asset in $repositories) {
-        $repository = Get-CanonicalPath -Path $asset.sourceRepository
-        $git = Get-GitFacts -Path $repository
-        if (-not $git.IsRepository) { throw "BLOCKED: Registry source is no longer a Git repository: $repository" }
-        if (-not $git.IsClean) { throw "BLOCKED: Source worktree is dirty: $repository" }
-        if (-not $git.Remote) { throw "BLOCKED: Source repository has no origin remote: $repository" }
+        $repository = [string]$asset.sourceRepository              # Preserve the Registry path if canonicalization itself fails.
+        try {
+            $repository = Get-CanonicalPath -Path $repository
+            $git = Get-GitFacts -Path $repository
+            if (-not $git.IsRepository) { throw "BLOCKED: Registry source is no longer a Git repository: $repository" }
+            if (-not $git.IsClean) { throw "BLOCKED: Source worktree is dirty: $repository" }
+            if (-not $git.Remote) { throw "BLOCKED: Source repository has no origin remote: $repository" }
 
-        & git -C $repository fetch --prune origin | Out-Null         # Fetch changes refs but leaves the active worktree and branch untouched.
-        if ($LASTEXITCODE -ne 0) { throw "BLOCKED: Fetch failed for '$repository'." }
-        $candidateRef = Get-UpdateRef -Repository $repository -RequestedRef $Ref
-        $candidateCommit = ((& git -C $repository rev-parse $candidateRef 2>$null) -join "").Trim()
-        if (-not $candidateCommit) { throw "BLOCKED: Candidate ref '$candidateRef' is unreadable in '$repository'." }
-        & git -C $repository merge-base --is-ancestor $git.Commit $candidateCommit
-        if ($LASTEXITCODE -ne 0) { throw "BLOCKED: Candidate '$candidateRef' is not a fast-forward from $($git.Commit)." }
+            & git -C $repository fetch --prune origin | Out-Null   # Fetch changes refs but leaves the active worktree and branch untouched.
+            if ($LASTEXITCODE -ne 0) { throw "BLOCKED: Fetch failed for '$repository'." }
+            $candidateRef = Get-UpdateRef -Repository $repository -RequestedRef $Ref
+            $candidateCommit = ((& git -C $repository rev-parse $candidateRef 2>$null) -join "").Trim()
+            if (-not $candidateCommit) { throw "BLOCKED: Candidate ref '$candidateRef' is unreadable in '$repository'." }
+            & git -C $repository merge-base --is-ancestor $git.Commit $candidateCommit
+            if ($LASTEXITCODE -ne 0) { throw "BLOCKED: Candidate '$candidateRef' is not a fast-forward from $($git.Commit)." }
 
-        $validation = Test-UpdateCandidate -Repository $repository -CandidateCommit $candidateCommit -StagingHome $StagingHome
-        $behind = [int](((& git -C $repository rev-list --count "$($git.Commit)..$candidateCommit") -join "").Trim())
-        $result = [pscustomobject]@{
-            status = "PASS"                                        # Fetch, ancestry, and detached candidate validation all passed.
-            action = if ($Apply -and $behind -gt 0) { "UPDATED" } elseif ($behind -eq 0) { "CURRENT" } else { "PREVIEW" }
-            name = $asset.name
-            repository = $repository
-            previousCommit = $git.Commit
-            candidateCommit = $candidateCommit
-            commitsBehind = $behind
-            validatedEntries = $validation.EntryCount
+            $validation = Test-UpdateCandidate -Repository $repository -CandidateCommit $candidateCommit -StagingHome $StagingHome
+            $behind = [int](((& git -C $repository rev-list --count "$($git.Commit)..$candidateCommit") -join "").Trim())
+            $result = [pscustomobject]@{
+                status = "PASS"                                    # Fetch, ancestry, and detached candidate validation all passed.
+                action = if ($Apply -and $behind -gt 0) { "UPDATED" } elseif ($behind -eq 0) { "CURRENT" } else { "PREVIEW" }
+                name = $asset.name
+                repository = $repository
+                previousCommit = $git.Commit
+                candidateCommit = $candidateCommit
+                commitsBehind = $behind
+                validatedEntries = $validation.EntryCount
+                error = $null                                      # A common result shape simplifies batch consumers.
+            }
+            if ($Apply -and $behind -gt 0) {
+                & git -C $repository merge --ff-only $candidateCommit | Out-Null # The only worktree mutation happens after candidate validation.
+                if ($LASTEXITCODE -ne 0) { throw "BLOCKED: Final fast-forward failed for '$repository'." }
+            }
+            $results.Add($result)
         }
-        if ($Apply -and $behind -gt 0) {
-            & git -C $repository merge --ff-only $candidateCommit | Out-Null # The only worktree mutation happens after candidate validation.
-            if ($LASTEXITCODE -ne 0) { throw "BLOCKED: Final fast-forward failed for '$repository'." }
+        catch {
+            if ($Name -ne "all") { throw }                         # A named target preserves strict fail-fast command semantics.
+            $results.Add([pscustomobject]@{
+                status = "BLOCKED"                                 # One repository lacks a mutation gate; other repositories remain eligible.
+                action = "SKIPPED"
+                name = $asset.name
+                repository = $repository
+                previousCommit = $asset.commit
+                candidateCommit = $null
+                commitsBehind = $null
+                validatedEntries = 0
+                error = $_.Exception.Message
+            })
         }
-        $results.Add($result)
     }
 
     if ($Apply) {

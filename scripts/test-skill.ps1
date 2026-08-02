@@ -145,10 +145,23 @@ try {
     Assert-Test ($updateResult[0].action -eq "UPDATED") "Source update did not report UPDATED."
     Assert-Test ($beforeUpdate -ne $afterUpdate) "Source repository did not fast-forward."
 
+    $blockedManaged = Join-Path $sourceHome "update-blocked"
+    New-TestSkill -Root $blockedManaged -Name "update-blocked"
+    & git -C $blockedManaged init -b main | Out-Null
+    & git -C $blockedManaged config user.name "Skill Lifecycle Test"
+    & git -C $blockedManaged config user.email "skill-lifecycle-test@example.invalid"
+    Save-TestRepository -Repository $blockedManaged
+    Add-Content -LiteralPath (Join-Path $blockedManaged "SKILL.md") -Value "`nDirty fixture content." -Encoding utf8 # Dirty worktree must block only this repository in all mode.
+    New-Item -ItemType Junction -Path (Join-Path $updateHome "update-blocked") -Target $blockedManaged | Out-Null
+    $null = Invoke-SkillScan -Paths @($updateHome) -RegistryDirectory $registryRoot -WriteRegistry
+    $allUpdateResults = @(Update-SkillAsset -Name "all" -RegistryDirectory $registryRoot -StagingHome $stagingHome -Apply)
+    Assert-Test (@($allUpdateResults | Where-Object { $_.name -eq "update-one" -and $_.action -eq "CURRENT" }).Count -eq 1) "Batch update did not continue to the clean repository."
+    Assert-Test (@($allUpdateResults | Where-Object { $_.name -eq "update-blocked" -and $_.status -eq "BLOCKED" -and $_.action -eq "SKIPPED" }).Count -eq 1) "Batch update did not isolate the dirty repository."
+
     $backupRoot = Join-Path $testRoot "backups"
     $backupResult = Backup-AICapabilities -Paths @($skillHome, $registryRoot, $updateHome) -BackupRoot $backupRoot -Apply
     Assert-Test ($backupResult.action -eq "BACKED_UP") "Backup did not complete."
-    Assert-Test ($backupResult.linkCount -eq 3) "Backup did not record all three activity junctions exactly once."
+    Assert-Test ($backupResult.linkCount -eq 4) "Backup did not record all four activity junctions exactly once."
     $backupManifest = Get-Content -Raw -LiteralPath $backupResult.manifest | ConvertFrom-Json
     $updateActivityRoot = Get-CanonicalPath -Path $updateHome       # This fixture root contains only a junction to the managed repository.
     $filesCopiedThroughJunction = @($backupManifest.files | Where-Object sourceRoot -eq $updateActivityRoot)
@@ -161,7 +174,7 @@ try {
 
     $suiteResult = [pscustomobject]@{
         status = "PASS"                                            # Every public v1.0 capability completed against isolated fixtures.
-        tests = 25
+        tests = 27
         classifications = $registry.summary.lifecycleMode
         updatedFrom = $beforeUpdate
         updatedTo = $afterUpdate
