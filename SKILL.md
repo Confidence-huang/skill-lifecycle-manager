@@ -1,6 +1,6 @@
 ---
 name: skill-lifecycle-manager
-description: Manage the complete lifecycle of Codex and cross-agent Skills on Windows with PowerShell 7. Use when Codex needs to inventory or classify Skills, generate the canonical Skill Registry, install a local or Git-backed Skill, update source-managed Skills through fetch and candidate validation, create an AI capability backup, or restore a backup into an empty destination. Distinguishes SYSTEM, USER, PROJECT, and UNKNOWN asset scope from PACKAGE, SOURCE, HYBRID, and UNKNOWN lifecycle mode.
+description: Manage and govern the complete lifecycle of Codex and cross-agent Skills on Windows with PowerShell 7. Use when Codex needs to inventory or classify Skills, generate the canonical Skill Registry, build an evidence-backed capability graph, measure governance evidence without inventing quality or usage scores, install a local or Git-backed Skill, update source-managed Skills through candidate validation, create an AI capability backup, or restore into an empty destination. Distinguishes asset scope, lifecycle mode, observed governance state, and unknown assessment evidence.
 ---
 
 # Skill Lifecycle Manager
@@ -65,6 +65,22 @@ pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command report -Apply
 ```
 
 The report explains physical entries, exact names, top-level activations, nested Skills, aliases, and collisions. It does not claim that the physical count equals the Codex Desktop list size.
+
+## Govern capabilities
+
+Preview the live capability graph, evidence readiness, and observed lifecycle states:
+
+```powershell
+pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command governance
+```
+
+Refresh the canonical Registry and generate `skill-governance-report.md`:
+
+```powershell
+pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command governance -Apply
+```
+
+Governance never fabricates A/B grades. `evidenceReadinessScore` covers only metadata, activation, maintenance mode, provenance, and collision evidence. Quality, usage, and security remain `UNKNOWN` until real evaluation, telemetry, and audits exist. Read [references/governance.md](references/governance.md) before using governance fields for decisions.
 
 ## Install
 

@@ -10,6 +10,7 @@ param([string]$TestParent = ([IO.Path]::GetTempPath()))              # Callers m
 $ErrorActionPreference = "Stop"                                    # One failed assertion stops the suite with a non-zero exit.
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $scriptRoot "skill-state.ps1")                         # Test the same shared functions loaded by the CLI.
+. (Join-Path $scriptRoot "commands\governance.ps1")
 . (Join-Path $scriptRoot "commands\scan.ps1")
 . (Join-Path $scriptRoot "commands\report.ps1")
 . (Join-Path $scriptRoot "commands\install.ps1")
@@ -27,9 +28,13 @@ function Assert-Test {
 
 # --- Write one minimal valid Skill entry ---
 function New-TestSkill {
-    param([Parameter(Mandatory)][string]$Root, [Parameter(Mandatory)][string]$Name)
+    param(
+        [Parameter(Mandatory)][string]$Root,                        # Fixture Skill directory owned by this isolated test run.
+        [Parameter(Mandatory)][string]$Name,                        # Frontmatter name supplies deterministic identity.
+        [string]$Description = "Test Skill named $Name for lifecycle fixtures." # Optional domain text exercises governance classification.
+    )
     New-Item -ItemType Directory -Path $Root -Force | Out-Null      # Fixture roots are transaction-owned and may be nested.
-    $content = "---`nname: $Name`ndescription: Test Skill named $Name for lifecycle fixtures.`n---`n`n# $Name`n"
+    $content = "---`nname: $Name`ndescription: $Description`n---`n`n# $Name`n"
     [IO.File]::WriteAllText((Join-Path $Root "SKILL.md"), $content, [Text.UTF8Encoding]::new($false)) # Emit strict UTF-8 frontmatter.
 }
 
@@ -55,7 +60,7 @@ New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
 try {
     $scanRoot = Join-Path $testRoot "scan-root"
     $packageRoot = Join-Path $scanRoot "package-one"
-    New-TestSkill -Root $packageRoot -Name "package-one"            # No Git owner should classify as PACKAGE.
+    New-TestSkill -Root $packageRoot -Name "package-one" -Description "Create presentation slides and PowerPoint documents for governance fixtures." # No Git owner should classify as PACKAGE.
 
     $sourceRoot = Join-Path $scanRoot "source-one"
     New-TestSkill -Root $sourceRoot -Name "source-one"
@@ -77,6 +82,14 @@ try {
     Assert-Test ($registry.summary.total -eq 4) "Scan should discover four eligible physical Skills."
     Assert-Test ($registry.summary.inventory.physicalEntries -eq 4 -and $registry.summary.inventory.uniqueNames -eq 4) "Inventory views should distinguish physical entries from exact names."
     Assert-Test ($registry.summary.inventory.topLevelEntries -eq 2 -and $registry.summary.inventory.nestedEntries -eq 2) "Inventory should distinguish top-level entries from nested repository Skills."
+    $governedPackage = @($registry.skills | Where-Object name -eq "package-one")[0]
+    Assert-Test ($governedPackage.isTopLevel -and $governedPackage.governanceState -eq "AVAILABLE") "Top-level PASS package should remain available."
+    Assert-Test ($governedPackage.capabilityDomains -contains "documents-presentations" -and $governedPackage.capabilityEvidence.Count -gt 0) "Lexical capability classification did not retain its evidence."
+    Assert-Test ($governedPackage.evidenceReadinessScore -eq 75 -and $governedPackage.evidenceTier -eq "PARTIAL_EVIDENCE") "Historical package evidence readiness was scored incorrectly."
+    Assert-Test ($governedPackage.overallGrade -eq "UNRATED" -and $governedPackage.usageEvidence -eq "UNKNOWN_NO_TELEMETRY") "Missing usage evidence was converted into an invented grade."
+    Assert-Test (@($registry.skills | Where-Object { $_.name -like "hybrid-*" -and -not $_.isTopLevel -and $_.governanceState -eq "REVIEW_REQUIRED" }).Count -eq 2) "Nested provenance gaps should enter the review queue."
+    Assert-Test ($registry.summary.assessmentCoverage.qualityKnown -eq 0 -and $registry.summary.assessmentCoverage.usageKnown -eq 0 -and $registry.summary.assessmentCoverage.securityKnown -eq 0) "Unknown assessment coverage must remain explicit."
+    Assert-Test ($registry.summary.capabilityDomain."documents-presentations" -eq 1) "Capability-domain summary does not match the classified fixture."
     Assert-Test (@($registry.skills | Where-Object { $_.name -eq "package-one" -and $_.lifecycleMode -eq "PACKAGE" }).Count -eq 1) "Package classification failed."
     Assert-Test (@($registry.skills | Where-Object { $_.name -eq "source-one" -and $_.lifecycleMode -eq "SOURCE" }).Count -eq 1) "Source classification failed."
     Assert-Test (@($registry.skills | Where-Object { $_.name -like "hybrid-*" -and $_.lifecycleMode -eq "HYBRID" }).Count -eq 2) "Hybrid classification failed."
@@ -86,6 +99,12 @@ try {
     Assert-Test ($reportPreview.action -eq "PREVIEW" -and -not (Test-Path -LiteralPath $reportPreview.reportPath)) "Report preview unexpectedly wrote a file."
     $reportResult = Write-SkillCapabilityReport -RegistryDirectory $registryRoot -Apply
     Assert-Test ($reportResult.action -eq "REPORTED" -and (Test-Path -LiteralPath $reportResult.reportPath)) "Capability report was not generated."
+    $governancePreview = Write-SkillGovernanceReport -Registry $registry -RegistryDirectory $registryRoot
+    Assert-Test ($governancePreview.action -eq "PREVIEW" -and -not (Test-Path -LiteralPath $governancePreview.reportPath)) "Governance preview unexpectedly wrote a file."
+    $governanceResult = Write-SkillGovernanceReport -Registry $registry -RegistryDirectory $registryRoot -Apply
+    Assert-Test ($governanceResult.action -eq "GOVERNED" -and (Test-Path -LiteralPath $governanceResult.reportPath)) "Governance report was not generated."
+    $governanceText = Get-Content -Raw -LiteralPath $governanceResult.reportPath
+    Assert-Test ($governanceText -match "All Skills remain ``UNRATED``" -and $governanceText -match "documents-presentations") "Governance report omitted the no-fabricated-grade boundary or capability graph."
 
     $installSource = Join-Path $testRoot "incoming\installed-package"
     New-TestSkill -Root $installSource -Name "installed-package"
@@ -174,7 +193,7 @@ try {
 
     $suiteResult = [pscustomobject]@{
         status = "PASS"                                            # Every public v1.0 capability completed against isolated fixtures.
-        tests = 27
+        tests = 37
         classifications = $registry.summary.lifecycleMode
         updatedFrom = $beforeUpdate
         updatedTo = $afterUpdate

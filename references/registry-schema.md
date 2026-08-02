@@ -31,6 +31,18 @@ The JSON Registry is the canonical machine-readable state. The YAML file beside 
 | `commit` | Full local commit SHA when available. |
 | `entryCount` | Eligible `SKILL.md` entries in the containing Git repository. |
 | `issues` | Exact reasons for `BLOCKED` or `UNKNOWN`, never hidden behind a generic health score. |
+| `isTopLevel` | Whether any activation path is a direct child of a scanned root. |
+| `capabilityDomains` | Lexically inferred navigation domains; not semantic-equivalence claims. |
+| `capabilityEvidence` | Rule meanings that explain each domain assignment. |
+| `governanceState` | `AVAILABLE`, `SYSTEM_MANAGED`, `MANAGED_WITH_PARENT`, or `REVIEW_REQUIRED`. |
+| `evidenceReadinessScore` | 0–100 completeness of metadata, activation, lifecycle, provenance, and collision evidence. |
+| `evidenceTier` | `READY_EVIDENCE`, `PARTIAL_EVIDENCE`, or `REVIEW_EVIDENCE`. |
+| `qualityEvidence` | Behavioral-quality evidence state; currently UNKNOWN without uniform evaluations. |
+| `usageEvidence` | Invocation-evidence state; currently UNKNOWN without authorized telemetry. |
+| `securityEvidence` | Audit-evidence state; currently UNKNOWN without a per-Skill audit. |
+| `overallGrade` | `UNRATED` until quality, usage, and security evidence exists. |
+| `recommendedAction` | Non-destructive suggestion derived from the observed governance state. |
+| `governanceGaps` | Exact evidence still required before stronger lifecycle decisions. |
 
 ## Inventory count fields
 
@@ -53,3 +65,6 @@ The JSON Registry is the canonical machine-readable state. The YAML file beside 
 - Treat equal names with different physical paths as a name collision, not as proven duplicates.
 - Do not infer publisher identity from matching SHA256 values.
 - Do not treat a branch name as an immutable version.
+- Treat capability domains as a navigation graph, not proof that two Skills are duplicates.
+- Treat evidence readiness as evidence completeness, not quality, safety, popularity, or business value.
+- Keep overall grades UNRATED when behavior, usage, or security evidence is missing.

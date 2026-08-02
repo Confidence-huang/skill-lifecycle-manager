@@ -110,7 +110,7 @@ function Convert-RegistryToYAML {
     foreach ($property in $Registry.summary.inventory.PSObject.Properties) {
         $lines.Add("    $($property.Name): $($property.Value)")    # Inventory names make the counting unit explicit in the mirror.
     }
-    foreach ($groupName in @("status", "scope", "lifecycleMode")) {
+    foreach ($groupName in @("status", "scope", "lifecycleMode", "governanceState", "evidenceTier", "capabilityDomain", "assessmentCoverage")) {
         $lines.Add("  ${groupName}:")
         $group = $Registry.summary.$groupName                       # Summary keys are controlled enum values from the scanner.
         foreach ($property in $group.PSObject.Properties) { $lines.Add("    $($property.Name): $($property.Value)") }
@@ -118,13 +118,14 @@ function Convert-RegistryToYAML {
     $lines.Add("skills:")
     foreach ($skill in $Registry.skills) {
         $lines.Add("  - name: $(ConvertTo-YAMLScalar $skill.name)")
-        foreach ($field in @("description", "status", "scope", "lifecycleMode", "physicalPath", "origin", "sourceRepository", "remote", "branch", "commit", "entryCount")) {
+        foreach ($field in @("description", "status", "scope", "lifecycleMode", "physicalPath", "origin", "sourceRepository", "remote", "branch", "commit", "entryCount", "isTopLevel", "governanceState", "evidenceReadinessScore", "evidenceTier", "qualityEvidence", "usageEvidence", "securityEvidence", "overallGrade", "recommendedAction")) {
             $lines.Add("    ${field}: $(ConvertTo-YAMLScalar $skill.$field)") # Quote every free-text or path field consistently.
         }
-        $lines.Add("    activePaths:")
-        foreach ($path in $skill.activePaths) { $lines.Add("      - $(ConvertTo-YAMLScalar $path)") }
-        $lines.Add("    issues:")
-        if ($skill.issues.Count -eq 0) { $lines.Add("      []") } else { foreach ($issue in $skill.issues) { $lines.Add("      - $(ConvertTo-YAMLScalar $issue)") } }
+        foreach ($arrayField in @("activePaths", "capabilityDomains", "capabilityEvidence", "issues", "governanceGaps")) {
+            $lines.Add("    ${arrayField}:")
+            $values = @($skill.$arrayField)                         # Every list keeps the same JSON order in the YAML mirror.
+            if ($values.Count -eq 0) { $lines.Add("      []") } else { foreach ($value in $values) { $lines.Add("      - $(ConvertTo-YAMLScalar $value)") } }
+        }
     }
     return ($lines -join "`n") + "`n"                              # End with one newline for clean diffs and shell display.
 }
@@ -189,6 +190,7 @@ function Invoke-SkillScan {
         }
     }
     $sameNamePhysicalExtras = (@($nameGroups | ForEach-Object { $_.Count - 1 }) | Measure-Object -Sum).Sum
+    $governanceSummary = Add-SkillGovernanceFields -Records $records -TopLevelIdentities $topLevelIdentities # Additive fields preserve the one-Registry design.
     $summary = [pscustomobject]@{
         total = $records.Count                                      # Compatibility alias: this means physical entries, never UI rows.
         inventory = [pscustomobject]@{
@@ -203,11 +205,15 @@ function Invoke-SkillScan {
         status = [pscustomobject]@{ PASS = @($records | Where-Object status -eq "PASS").Count; BLOCKED = @($records | Where-Object status -eq "BLOCKED").Count; UNKNOWN = @($records | Where-Object status -eq "UNKNOWN").Count }
         scope = [pscustomobject]@{ SYSTEM = @($records | Where-Object scope -eq "SYSTEM").Count; USER = @($records | Where-Object scope -eq "USER").Count; PROJECT = @($records | Where-Object scope -eq "PROJECT").Count; UNKNOWN = @($records | Where-Object scope -eq "UNKNOWN").Count }
         lifecycleMode = [pscustomobject]@{ PACKAGE = @($records | Where-Object lifecycleMode -eq "PACKAGE").Count; SOURCE = @($records | Where-Object lifecycleMode -eq "SOURCE").Count; HYBRID = @($records | Where-Object lifecycleMode -eq "HYBRID").Count; UNKNOWN = @($records | Where-Object lifecycleMode -eq "UNKNOWN").Count }
+        governanceState = $governanceSummary.governanceState       # Observed availability never grants deletion or upgrade authority.
+        evidenceTier = $governanceSummary.evidenceTier             # Readiness measures evidence completeness rather than task quality.
+        capabilityDomain = $governanceSummary.capabilityDomain     # Lexical domain counts form the generated capability graph.
+        assessmentCoverage = $governanceSummary.assessmentCoverage # Unknown usage, quality, and security stay explicit.
     }
     $registry = [pscustomobject]@{
         schemaVersion = 1                                          # Increment only when field semantics become incompatible.
         generatedAt = (Get-Date).ToString("o")                      # Local offset is retained for cross-session evidence.
-        generator = "skill-lifecycle-manager/1.1.0"                # Version 1.1 adds explicit human-facing inventory units.
+        generator = "skill-lifecycle-manager/1.2.0"                # Version 1.2 adds evidence-backed capability governance.
         roots = @($rootRecords.Path | Sort-Object -Unique)          # Record exactly which live surfaces were inspected.
         summary = $summary                                          # Compact health and classification counts.
         skills = $records                                           # Full evidence records remain the Registry source of truth.
