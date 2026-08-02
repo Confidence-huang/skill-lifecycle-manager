@@ -18,9 +18,21 @@ function Copy-CapabilityTree {
 
     $source = Get-CanonicalPath -Path $SourceRoot                   # Canonical source identity is retained in the manifest.
     New-Item -ItemType Directory -Path $DestinationRoot -Force | Out-Null
-    $items = [Collections.Generic.List[object]]::new()              # Explicit additions prevent a recursive result from becoming a nested array.
-    $items.Add((Get-Item -Force -LiteralPath $source))
-    foreach ($child in Get-ChildItem -Force -LiteralPath $source -Recurse) { $items.Add($child) }
+    $items = [Collections.Generic.List[object]]::new()              # Explicit enumeration lets us stop before entering any junction.
+    $pendingDirectories = [Collections.Generic.Stack[object]]::new() # The stack contains physical directories that are safe to enumerate.
+    $sourceItem = Get-Item -Force -LiteralPath $source
+    $items.Add($sourceItem)                                        # Keep the selected root itself in the manifest or link records.
+    if ($sourceItem.PSIsContainer -and -not ($sourceItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        $pendingDirectories.Push($sourceItem)                       # A reparse-point root is recorded but never traversed.
+    }
+    while ($pendingDirectories.Count -gt 0) {
+        $directory = $pendingDirectories.Pop()                     # Enumerate one proven physical directory at a time.
+        foreach ($child in Get-ChildItem -Force -LiteralPath $directory.FullName) {
+            $items.Add($child)                                     # Every direct child is copied or recorded exactly once.
+            $isPhysicalDirectory = $child.PSIsContainer -and -not ($child.Attributes -band [IO.FileAttributes]::ReparsePoint)
+            if ($isPhysicalDirectory) { $pendingDirectories.Push($child) } # Junction descendants never enter the traversal stack.
+        }
+    }
     foreach ($item in $items) {
         $relative = if ($item.FullName -eq $source) { "." } else { [IO.Path]::GetRelativePath($source, $item.FullName) }
         if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {

@@ -142,6 +142,10 @@ try {
     $backupResult = Backup-AICapabilities -Paths @($skillHome, $registryRoot, $updateHome) -BackupRoot $backupRoot -Apply
     Assert-Test ($backupResult.action -eq "BACKED_UP") "Backup did not complete."
     Assert-Test ($backupResult.linkCount -eq 3) "Backup did not record all three activity junctions exactly once."
+    $backupManifest = Get-Content -Raw -LiteralPath $backupResult.manifest | ConvertFrom-Json
+    $updateActivityRoot = Get-CanonicalPath -Path $updateHome       # This fixture root contains only a junction to the managed repository.
+    $filesCopiedThroughJunction = @($backupManifest.files | Where-Object sourceRoot -eq $updateActivityRoot)
+    Assert-Test ($filesCopiedThroughJunction.Count -eq 0) "Backup entered an activity junction instead of recording only the link."
     $restoreRoot = Join-Path $testRoot "restored"
     $restorePreview = Restore-AICapabilities -BackupPath $backupResult.destination -DestinationRoot $restoreRoot
     Assert-Test ($restorePreview.action -eq "PREVIEW") "Restore preview did not validate the backup."
@@ -150,7 +154,7 @@ try {
 
     $suiteResult = [pscustomobject]@{
         status = "PASS"                                            # Every public v1.0 capability completed against isolated fixtures.
-        tests = 20
+        tests = 21
         classifications = $registry.summary.lifecycleMode
         updatedFrom = $beforeUpdate
         updatedTo = $afterUpdate
