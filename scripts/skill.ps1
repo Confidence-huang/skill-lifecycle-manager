@@ -7,7 +7,7 @@ Call example: pwsh -NoProfile -File .\skill.ps1 -Command registry -Apply
 
 [CmdletBinding()]
 param(
-    [ValidateSet("help", "scan", "registry", "report", "governance", "stabilize", "health", "install", "update", "backup", "restore")]
+    [ValidateSet("help", "scan", "registry", "report", "governance", "stabilize", "health", "verify", "install", "update", "backup", "restore")]
     [string]$Command = "help",                                     # One explicit lifecycle action per invocation.
     [string[]]$Path,                                                # Scan or backup roots; defaults depend on the command.
     [string]$ProjectRoot,                                           # Optional project-local Skill discovery root.
@@ -16,6 +16,7 @@ param(
     [ValidateSet("Auto", "Package", "Source", "Hybrid")]
     [string]$Mode = "Auto",                                       # Acquisition mode; Auto derives it from source evidence.
     [string]$SkillPath,                                             # Relative selected Skill directory for HYBRID repositories.
+    [string]$TargetSkill,                                           # Exact existing Skill root for targeted v2 verification.
     [string]$Ref,                                                   # Optional Git update/install branch, tag, or commit.
     [string]$SkillHome = "D:\CodexProjects\_skills\agents\skills",
     [string]$SourceHome = "D:\CodexProjects\_skills\sources",
@@ -34,6 +35,7 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path       # Resolve re
 . (Join-Path $scriptRoot "commands\scan.ps1")                      # Load discovery, classification, and Registry output.
 . (Join-Path $scriptRoot "commands\stability.ps1")                 # Load stable-baseline capture and read-only routine health.
 . (Join-Path $scriptRoot "commands\report.ps1")                    # Load the human-facing count and collision report.
+. (Join-Path $scriptRoot "commands\verification.ps1")              # Load optional Runtime and Behavior probes without auto-repair.
 . (Join-Path $scriptRoot "commands\install.ps1")                   # Load transactional package/source/hybrid installation.
 . (Join-Path $scriptRoot "commands\update.ps1")                    # Load fetch, candidate validation, and fast-forward update.
 . (Join-Path $scriptRoot "commands\backup.ps1")                    # Load physical-file backup and link recording.
@@ -46,7 +48,7 @@ try {
         "help" {
             [pscustomobject]@{
                 status = "PASS"                                    # Help is a read-only successful command.
-                commands = @("scan", "registry", "report", "governance", "stabilize", "health", "install", "update", "backup", "restore")
+                commands = @("scan", "registry", "report", "governance", "stabilize", "health", "verify", "install", "update", "backup", "restore")
                 applyRule = "Preview by default; add -Apply for final writes."
                 registry = $RegistryDirectory
             }
@@ -73,6 +75,10 @@ try {
             $managerRoot = Split-Path -Parent $scriptRoot           # Routine checks compare the running code to its frozen Git identity.
             $managerActivity = Join-Path $SkillHome "skill-lifecycle-manager"
             Get-SkillHealth -RegistryDirectory $RegistryDirectory -BackupRoot $BackupRoot -ManagerRoot $managerRoot -ActivityPath $managerActivity -ProjectRoot $ProjectRoot
+        }
+        "verify" {
+            $verificationTarget = Resolve-SkillVerificationTarget -Name $Name -TargetSkill $TargetSkill -RegistryDirectory $RegistryDirectory
+            Invoke-SkillVerification -SkillRoot $verificationTarget -RegistryDirectory $RegistryDirectory -Execute:$Apply
         }
         "install" {
             if (-not $Source) { throw "BLOCKED: install requires -Source." }
@@ -101,6 +107,7 @@ try {
         }
     }
     $result | ConvertTo-Json -Depth 14                              # Stable structured feedback supports both humans and calling agents.
+    if ($Command -eq "verify" -and $result.status -ne "PASS") { exit 1 } # Automation must not mistake BLOCKED or UNKNOWN evidence for success.
     $global:LASTEXITCODE = 0                                       # Successful internal probes must not leak an earlier Git exit code.
 }
 catch {

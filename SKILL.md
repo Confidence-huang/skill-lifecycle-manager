@@ -1,6 +1,6 @@
 ---
 name: skill-lifecycle-manager
-description: Manage and govern the complete lifecycle of Codex and cross-agent Skills on Windows with PowerShell 7. Use when Codex needs to inventory or classify Skills, generate the canonical Skill Registry, build an evidence-backed capability graph, freeze a verified stable-use baseline, run a read-only AI capability health check, validate a project's declared Skill working set, install or update a managed Skill, create a capability backup, or restore into an empty destination. Distinguishes asset scope, lifecycle mode, observed governance state, and unknown assessment evidence without inventing quality or usage scores.
+description: Manage and govern the complete lifecycle of Codex and cross-agent Skills on Windows with PowerShell 7. Use when Codex needs to inventory or classify Skills, generate the canonical Skill Registry, run layered Static, Runtime, and Behavior Health verification, build an evidence-backed capability graph, freeze a verified stable-use baseline, validate a project's declared Skill working set, install or update a managed Skill, create a capability backup, or restore into an empty destination. Distinguishes asset scope, lifecycle mode, observed governance state, and unknown assessment evidence without inventing quality or usage scores.
 ---
 
 # Skill Lifecycle Manager
@@ -24,7 +24,8 @@ Keep two classifications separate:
 8. Pin Git-backed installations to the resolved full commit SHA. A branch is only an update channel.
 9. Update with `fetch -> compare -> detached candidate validation -> fast-forward`, never with an unchecked `git pull`.
 10. Keep backup and restore targets explicit. Restore only into an empty destination.
-11. After Phase 2 is verified, prefer stable-use observation over immediate Registry redesign or automatic routing.
+11. Treat `verify` as evidence collection: never auto-repair a failing Skill, dependency, or environment.
+12. After Phase 2 is verified, prefer stable-use observation over immediate Registry redesign or automatic routing.
 
 ## Command entry
 
@@ -106,6 +107,22 @@ pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command health -ProjectR
 
 The stability baseline records local commits, Registry/report hashes, activity identity, and the latest complete backup. Health performs no writes and no remote fetch, so upstream freshness remains `UNKNOWN_NOT_FETCHED`. Project tiers are role labels only; they do not change discovery or imply quality. Read [references/stability.md](references/stability.md) before freezing or interpreting health output.
 
+## Verify Runtime and Behavior Health
+
+Preview one activity entry without executing its probes:
+
+```powershell
+pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command verify -Name bilibili-video-learning
+```
+
+Run its declared probes and persist a timestamped evidence report:
+
+```powershell
+pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command verify -Name bilibili-video-learning -Apply
+```
+
+Use `-TargetSkill "<exact-skill-root>"` when verifying a candidate that is not yet in the Registry. A Skill without `skill.manifest.yaml` remains compatible: Static Health runs, while Runtime and Behavior report `NOT_CONFIGURED`. An opted-in manifest must use the documented JSON-compatible YAML subset and keep probes under `tests/`. Read [references/verification-v2.md](references/verification-v2.md) before authoring a manifest or interpreting `NOT_RUN`, `UNKNOWN`, and `BLOCKED`.
+
 ## Install
 
 Install a self-contained local package:
@@ -139,7 +156,7 @@ pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" `
   -Apply
 ```
 
-`Auto` mode classifies a local or cloned source from evidence. If a repository contains multiple eligible Skill entries, installation is `BLOCKED` until `-SkillPath` names the intended entry.
+`Auto` mode classifies a local or cloned source from evidence. If a repository contains multiple eligible Skill entries, installation is `BLOCKED` until `-SkillPath` names the intended entry. After activation and before Registry publication, installation runs only manifest layers with `runOnInstall: true`. A failure retains its health report, rolls back transaction-created source/activity paths, leaves the prior Registry unchanged, and never attempts an automatic repair.
 
 ## Update
 
@@ -183,7 +200,7 @@ Backups copy physical files once and record junctions separately. Restore recrea
 
 After any implementation or environment change:
 
-1. Run `scripts/test-skill.ps1`.
+1. Run `scripts/test-skill.ps1` (v2 includes layered verification and failed-install rollback fixtures).
 2. Run the bundled `quick_validate.py` against this Skill directory.
 3. Regenerate the live Registry.
 4. Confirm the activity path is a junction to the clean source repository.

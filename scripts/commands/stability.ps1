@@ -309,6 +309,11 @@ function Get-SkillHealth {
         upstreamFreshness = "UNKNOWN_NOT_FETCHED"                 # No network mutation or fetch occurs in routine health.
         automaticActions = $baseline.boundaries
         project = $project
+        health = [pscustomobject]@{
+            static = [pscustomobject]@{ status = if ($blockedChecks.Count) { "BLOCKED" } else { "PASS" }; checks = @($checks) }
+            runtime = [pscustomobject]@{ status = "NOT_RUN"; detail = "Use verify -Apply for one explicitly selected Skill." }
+            behavior = [pscustomobject]@{ status = "NOT_RUN"; detail = "Routine health never executes external behavior probes." }
+        }
         checks = @($checks)
         mutations = 0                                              # Explicit proof that health did not write or update assets.
     }

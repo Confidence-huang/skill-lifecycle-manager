@@ -1,5 +1,5 @@
 <#
-End-to-end fixture tests for scan, Registry, stability, health, install, update, backup, and restore.
+End-to-end fixture tests for scan, Registry, layered verification, stability, install, update, backup, and restore.
 Every artifact lives under one uniquely named temporary root and is removed in a final cleanup block.
 Call example: pwsh -NoProfile -File .\test-skill.ps1
 #>
@@ -14,6 +14,7 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $scriptRoot "commands\scan.ps1")
 . (Join-Path $scriptRoot "commands\stability.ps1")
 . (Join-Path $scriptRoot "commands\report.ps1")
+. (Join-Path $scriptRoot "commands\verification.ps1")
 . (Join-Path $scriptRoot "commands\install.ps1")
 . (Join-Path $scriptRoot "commands\update.ps1")
 . (Join-Path $scriptRoot "commands\backup.ps1")
@@ -37,6 +38,33 @@ function New-TestSkill {
     New-Item -ItemType Directory -Path $Root -Force | Out-Null      # Fixture roots are transaction-owned and may be nested.
     $content = "---`nname: $Name`ndescription: $Description`n---`n`n# $Name`n"
     [IO.File]::WriteAllText((Join-Path $Root "SKILL.md"), $content, [Text.UTF8Encoding]::new($false)) # Emit strict UTF-8 frontmatter.
+}
+
+
+# --- Add deterministic Runtime and Behavior probes to one fixture Skill ---
+function Add-TestVerificationManifest {
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$Name,
+        [int]$RuntimeExitCode = 0,
+        [int]$BehaviorExitCode = 0,
+        [bool]$RunOnInstall = $true
+    )
+
+    $testsRoot = Join-Path $Root "tests"
+    New-Item -ItemType Directory -Path $testsRoot -Force | Out-Null
+    $runtimeText = "[pscustomobject]@{ status = 'PASS'; layer = 'runtime' } | ConvertTo-Json -Compress`nexit $RuntimeExitCode`n"
+    $behaviorText = "[pscustomobject]@{ status = 'PASS'; layer = 'behavior' } | ConvertTo-Json -Compress`nexit $BehaviorExitCode`n"
+    [IO.File]::WriteAllText((Join-Path $testsRoot "runtime.ps1"), $runtimeText, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $testsRoot "behavior.ps1"), $behaviorText, [Text.UTF8Encoding]::new($false))
+    $manifest = [ordered]@{
+        schemaVersion = 1
+        name = $Name
+        requiredLayers = @("static", "runtime", "behavior")
+        runtime = [ordered]@{ command = "tests/runtime.ps1"; arguments = @(); timeoutSeconds = 20; runOnInstall = $RunOnInstall; expect = [ordered]@{ exitCode = 0; stdoutJsonEquals = [ordered]@{ status = "PASS"; layer = "runtime" } } }
+        behavior = [ordered]@{ command = "tests/behavior.ps1"; arguments = @(); timeoutSeconds = 20; runOnInstall = $RunOnInstall; expect = [ordered]@{ exitCode = 0; stdoutJsonEquals = [ordered]@{ status = "PASS"; layer = "behavior" } } }
+    }
+    [IO.File]::WriteAllText((Join-Path $Root "skill.manifest.yaml"), (($manifest | ConvertTo-Json -Depth 10) + "`n"), [Text.UTF8Encoding]::new($false)) # JSON is the supported YAML 1.2 subset.
 }
 
 
@@ -120,6 +148,54 @@ try {
     Assert-Test (-not (Test-Path -LiteralPath (Join-Path $skillHome "installed-package"))) "Preview unexpectedly created an activity entry."
     $installResult = Install-SkillAsset -Source $installSource -Mode Package -SkillHome $skillHome -SourceHome $sourceHome -StagingHome $stagingHome -RegistryDirectory $registryRoot -Apply
     Assert-Test ($installResult.action -eq "INSTALLED") "Package apply did not complete."
+    Assert-Test ($installResult.verification.health.static.status -eq "PASS" -and $installResult.verification.health.runtime.status -eq "NOT_CONFIGURED") "Legacy installation did not retain Static Health compatibility."
+
+    $verifiedSource = Join-Path $testRoot "incoming\verified-package"
+    New-TestSkill -Root $verifiedSource -Name "verified-package"
+    Add-TestVerificationManifest -Root $verifiedSource -Name "verified-package"
+    $verificationPreview = Invoke-SkillVerification -SkillRoot $verifiedSource -RegistryDirectory $registryRoot
+    Assert-Test ($verificationPreview.action -eq "PREVIEW" -and $verificationPreview.health.static.status -eq "PASS" -and $verificationPreview.health.runtime.status -eq "NOT_RUN") "Verification preview executed a probe or failed Static Health."
+    Assert-Test (-not $verificationPreview.reportPath -and $verificationPreview.mutations -eq 0) "Verification preview wrote evidence unexpectedly."
+    $verificationResult = Invoke-SkillVerification -SkillRoot $verifiedSource -RegistryDirectory $registryRoot -Execute
+    Assert-Test ($verificationResult.status -eq "PASS" -and $verificationResult.health.runtime.status -eq "PASS" -and $verificationResult.health.behavior.status -eq "PASS") "Layered verification did not pass deterministic probes."
+    Assert-Test ((Test-Path -LiteralPath $verificationResult.reportPath) -and -not $verificationResult.autoRepair) "Verification did not persist evidence or claimed auto-repair."
+    $verifiedInstall = Install-SkillAsset -Source $verifiedSource -Mode Package -SkillHome $skillHome -SourceHome $sourceHome -StagingHome $stagingHome -RegistryDirectory $registryRoot -Apply
+    Assert-Test ($verifiedInstall.action -eq "INSTALLED" -and $verifiedInstall.verification.health.behavior.status -eq "PASS") "Installation did not run declared verification layers before publication."
+
+    $blockedSource = Join-Path $testRoot "incoming\blocked-package"
+    New-TestSkill -Root $blockedSource -Name "blocked-package"
+    Add-TestVerificationManifest -Root $blockedSource -Name "blocked-package" -RuntimeExitCode 7
+    $registryHashBeforeBlockedInstall = (Get-FileHash -LiteralPath (Join-Path $registryRoot "skills-registry.json") -Algorithm SHA256).Hash
+    $blockedInstallMessage = $null
+    try { $null = Install-SkillAsset -Source $blockedSource -Mode Package -SkillHome $skillHome -SourceHome $sourceHome -StagingHome $stagingHome -RegistryDirectory $registryRoot -Apply }
+    catch { $blockedInstallMessage = $_.Exception.Message }
+    Assert-Test ($blockedInstallMessage -match "Install verification failed" -and -not (Test-Path -LiteralPath (Join-Path $skillHome "blocked-package"))) "Failed verification did not roll back the transaction-owned activity path."
+    Assert-Test ((Get-FileHash -LiteralPath (Join-Path $registryRoot "skills-registry.json") -Algorithm SHA256).Hash -eq $registryHashBeforeBlockedInstall) "Failed installation published a changed Registry."
+    Assert-Test (@(Get-ChildItem -LiteralPath (Join-Path $registryRoot "health-reports\blocked-package") -Filter "*.json" -File).Count -eq 1) "Failed installation did not retain its diagnostic evidence."
+
+    $behaviorFailureRoot = Join-Path $testRoot "incoming\behavior-failure"
+    New-TestSkill -Root $behaviorFailureRoot -Name "behavior-failure"
+    Add-TestVerificationManifest -Root $behaviorFailureRoot -Name "behavior-failure" -BehaviorExitCode 9 -RunOnInstall $false
+    $behaviorSkillHash = (Get-FileHash -LiteralPath (Join-Path $behaviorFailureRoot "SKILL.md") -Algorithm SHA256).Hash
+    $behaviorFailure = Invoke-SkillVerification -SkillRoot $behaviorFailureRoot -RegistryDirectory $registryRoot -Execute
+    Assert-Test ($behaviorFailure.status -eq "BLOCKED" -and $behaviorFailure.health.runtime.status -eq "PASS" -and $behaviorFailure.health.behavior.status -eq "BLOCKED") "Behavior failure was not separated from Runtime Health."
+    Assert-Test ((Get-FileHash -LiteralPath (Join-Path $behaviorFailureRoot "SKILL.md") -Algorithm SHA256).Hash -eq $behaviorSkillHash) "Verifier changed a failing Skill instead of reporting it."
+
+    $unknownRoot = Join-Path $testRoot "incoming\unknown-environment"
+    New-TestSkill -Root $unknownRoot -Name "unknown-environment"
+    Add-TestVerificationManifest -Root $unknownRoot -Name "unknown-environment" -RunOnInstall $false
+    $unknownManifestPath = Join-Path $unknownRoot "skill.manifest.yaml"
+    $unknownManifest = Get-Content -Raw -LiteralPath $unknownManifestPath | ConvertFrom-Json
+    $unknownManifest.runtime.arguments = @("{env:SKILL_LIFECYCLE_TEST_VALUE_THAT_DOES_NOT_EXIST}")
+    [IO.File]::WriteAllText($unknownManifestPath, (($unknownManifest | ConvertTo-Json -Depth 10) + "`n"), [Text.UTF8Encoding]::new($false))
+    $unknownVerification = Invoke-SkillVerification -SkillRoot $unknownRoot -RegistryDirectory $registryRoot -Execute
+    Assert-Test ($unknownVerification.status -eq "UNKNOWN" -and $unknownVerification.health.runtime.status -eq "UNKNOWN") "Missing environment evidence was not preserved as UNKNOWN."
+
+    $invalidManifestRoot = Join-Path $testRoot "incoming\invalid-manifest"
+    New-TestSkill -Root $invalidManifestRoot -Name "invalid-manifest"
+    [IO.File]::WriteAllText((Join-Path $invalidManifestRoot "skill.manifest.yaml"), "{ invalid JSON-compatible YAML", [Text.UTF8Encoding]::new($false))
+    $invalidManifest = Invoke-SkillVerification -SkillRoot $invalidManifestRoot -RegistryDirectory $registryRoot
+    Assert-Test ($invalidManifest.status -eq "BLOCKED" -and $invalidManifest.health.static.status -eq "BLOCKED") "Invalid manifest did not fail Static Health during preview."
 
     $gitPackageRoot = Join-Path $testRoot "incoming\git-package-one"
     New-TestSkill -Root $gitPackageRoot -Name "git-package-one"
@@ -221,8 +297,8 @@ try {
     Remove-Item -LiteralPath (Join-Path $managerRoot "local-drift.txt")
 
     $suiteResult = [pscustomobject]@{
-        status = "PASS"                                            # Every public v1.0 capability completed against isolated fixtures.
-        tests = 45
+        status = "PASS"                                            # Existing v1 and additive v2 capabilities completed against isolated fixtures.
+        tests = 58
         classifications = $registry.summary.lifecycleMode
         updatedFrom = $beforeUpdate
         updatedTo = $afterUpdate

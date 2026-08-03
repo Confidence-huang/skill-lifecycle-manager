@@ -101,6 +101,8 @@ function Install-SkillAsset {
         $sourcePath = if ($resolvedMode -eq "PACKAGE") { $null } else { Join-Path $SourceHome $repositoryName }
         if ($sourcePath) { Assert-PathWithinRoot -Path $sourcePath -Root $SourceHome } # Repository leaf cannot redirect outside source home.
         if ($sourcePath -and (Test-Path -LiteralPath $sourcePath)) { throw "BLOCKED: Source repository path already exists: $sourcePath" }
+        $verificationPreview = Invoke-SkillVerification -SkillRoot $selectedRoot -RegistryDirectory $RegistryDirectory # Static declaration faults block before any final path exists.
+        if ($verificationPreview.status -ne "PASS") { throw "BLOCKED: Skill verification manifest failed Static Health." }
 
         $plan = [pscustomobject]@{
             status = "PASS"                                        # Inspection and validation established an executable plan.
@@ -112,6 +114,7 @@ function Install-SkillAsset {
             sourceDestination = $sourcePath
             activityDestination = $activityPath
             commit = $git.Commit                                    # Full SHA pins the inspected Git candidate.
+            verification = $verificationPreview                     # Preview exposes the exact layers that installation will validate.
         }
         if (-not $Apply) { return $plan }                            # Preview leaves only a temporary clone that finally removes.
 
@@ -150,7 +153,10 @@ function Install-SkillAsset {
             $plan.commit = $installedCommit                         # Report the exact final clone rather than the inspection copy.
         }
 
-        $null = Invoke-SkillScan -Paths @($SkillHome) -RegistryDirectory $RegistryDirectory -WriteRegistry # State reflects the installed activity entry.
+        $verification = Invoke-SkillVerification -SkillRoot $activityPath -RegistryDirectory $RegistryDirectory -Execute -InstallPhase # Declared probes run after activation but before Registry publication.
+        $plan.verification = $verification
+        if ($verification.status -ne "PASS") { throw "BLOCKED: Install verification failed; evidence: $($verification.reportPath)" }
+        $null = Invoke-SkillScan -Paths @($SkillHome) -RegistryDirectory $RegistryDirectory -WriteRegistry # Publish canonical state only after required probes pass.
         $plan.status = "PASS"
         $plan.action = "INSTALLED"
         return $plan

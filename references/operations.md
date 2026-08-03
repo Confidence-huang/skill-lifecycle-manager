@@ -8,10 +8,13 @@
 4. Refuse an existing source or activity destination.
 5. Copy or clone the physical entity.
 6. Create a junction only after the physical source passes validation.
-7. Regenerate the Registry.
-8. Remove only paths created by the failed transaction when an error occurs.
+7. Run manifest layers explicitly marked `runOnInstall` and retain their evidence report.
+8. Publish the regenerated Registry only after required install probes pass.
+9. Remove only source/activity paths created by the failed transaction when an error occurs; retain diagnostic evidence and the previous Registry.
 
 The installer does not overwrite or merge an existing active Skill. Collision resolution is a separate review because equal names do not establish equal contents.
+
+Verification never repairs a missing module, executable, dependency, environment variable, or behavior result. `UNKNOWN` means the probe could not establish the fact; `BLOCKED` means the declared contract was executed or parsed and failed.
 
 ## Update transaction
 
