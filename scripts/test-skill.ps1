@@ -283,6 +283,8 @@ try {
 
     $managerRoot = Join-Path $sourceHome "source-one"              # Clean source fixture stands in for the manager repository.
     $managerActivity = Join-Path $skillHome "source-one"           # Existing host link proves single-source activation.
+    $resolvedManagerRoot = Resolve-SkillPhysicalPath -Path $managerActivity
+    Assert-Test (Test-SameSkillPath -Left $resolvedManagerRoot -Right $managerRoot) "Activity invocation did not resolve to the physical manager source."
     $stabilityPreview = Save-SkillStabilityBaseline -RegistryDirectory $registryRoot -BackupRoot $backupRoot -ManagerRoot $managerRoot -ActivityPath $managerActivity
     Assert-Test ($stabilityPreview.action -eq "PREVIEW" -and -not (Test-Path -LiteralPath (Join-Path $registryRoot "skill-stability-baseline.json"))) "Stability preview unexpectedly wrote the baseline."
     $stabilityResult = Save-SkillStabilityBaseline -RegistryDirectory $registryRoot -BackupRoot $backupRoot -ManagerRoot $managerRoot -ActivityPath $managerActivity -Apply
@@ -307,7 +309,7 @@ try {
 
     $suiteResult = [pscustomobject]@{
         status = "PASS"                                            # Existing v1 and additive v2 capabilities completed against isolated fixtures.
-        tests = 62
+        tests = 63
         classifications = $registry.summary.lifecycleMode
         updatedFrom = $beforeUpdate
         updatedTo = $afterUpdate

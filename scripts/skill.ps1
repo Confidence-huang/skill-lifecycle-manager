@@ -76,12 +76,12 @@ try {
             Write-SkillGovernanceReport -Registry $governanceRegistry -RegistryDirectory $RegistryDirectory -Apply:$Apply
         }
         "stabilize" {
-            $managerRoot = Split-Path -Parent $scriptRoot           # Source repository owns scripts/, references/, and Skill metadata.
+            $managerRoot = Resolve-SkillPhysicalPath -Path (Split-Path -Parent $scriptRoot) # Activity-link invocation must resolve to the physical source repository.
             $managerActivity = Join-Path $SkillHome "skill-lifecycle-manager"
             Save-SkillStabilityBaseline -RegistryDirectory $RegistryDirectory -BackupRoot $BackupRoot -ManagerRoot $managerRoot -ActivityPath $managerActivity -Apply:$Apply
         }
         "health" {
-            $managerRoot = Split-Path -Parent $scriptRoot           # Routine checks compare the running code to its frozen Git identity.
+            $managerRoot = Resolve-SkillPhysicalPath -Path (Split-Path -Parent $scriptRoot) # Routine checks compare the physical running source to its frozen Git identity.
             $managerActivity = Join-Path $SkillHome "skill-lifecycle-manager"
             Get-SkillHealth -RegistryDirectory $RegistryDirectory -BackupRoot $BackupRoot -ManagerRoot $managerRoot -ActivityPath $managerActivity -ProjectRoot $ProjectRoot
         }
