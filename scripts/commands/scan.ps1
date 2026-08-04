@@ -13,7 +13,7 @@ function New-SkillRecord {
         [Parameter(Mandatory)][string]$Scope                         # Scope comes from the scanned activation root.
     )
 
-    $physicalPath = Resolve-SkillPhysicalPath -Path $ActivePath     # Junction aliases collapse onto one physical Skill directory.
+    $physicalPath = Resolve-SkillPhysicalPath -Path $ActivePath     # Activity-link aliases collapse onto one physical Skill directory.
     $skillFile = Join-Path $physicalPath "SKILL.md"                 # Every record is anchored to the actual entry file.
     $metadata = Read-SkillMetadata -SkillFile $skillFile            # Strict frontmatter validation determines PASS or BLOCKED.
     $git = Get-GitFacts -Path $physicalPath                         # Git facts decide source ownership and immutable version evidence.
@@ -40,7 +40,7 @@ function New-SkillRecord {
     $mode = "PACKAGE"                                              # No Git owner means the activity directory is the managed package.
     if ($git.IsRepository) {
         $entryCount = @(Get-SkillEntryFiles -Root $git.Root).Count  # A multi-entry repository needs source plus selected activation paths.
-        $sameRoot = $physicalPath.TrimEnd("\") -eq $git.Root.TrimEnd("\")
+        $sameRoot = Test-SameSkillPath -Left $physicalPath -Right $git.Root # Repository-root identity follows the host's case rule.
         $mode = if ($sameRoot -and $entryCount -eq 1) { "SOURCE" } else { "HYBRID" }
         if (-not $git.Remote) { $issues.Add("Git repository has no origin remote; publisher provenance is UNKNOWN.") }
         if (-not $git.Commit) { $issues.Add("Git repository has no readable commit SHA.") }
@@ -70,7 +70,7 @@ function New-SkillRecord {
 }
 
 
-# --- Enumerate activity paths, including junction-backed entries ---
+# --- Enumerate activity paths, including link-backed entries ---
 function Get-ActivationSkillPaths {
     param([Parameter(Mandatory)][string]$Root)                       # Root itself stays canonical while each top-level entry may redirect.
 
@@ -142,7 +142,7 @@ function Invoke-SkillScan {
 
     $rootRecords = if ($Paths -and $Paths.Count) {                  # Explicit test or project scans get UNKNOWN scope unless recognizable.
         @($Paths | Where-Object { Test-Path -LiteralPath $_ -PathType Container } | ForEach-Object {
-            $scope = if ($ProjectRoot -and (Get-CanonicalPath $_).StartsWith((Get-CanonicalPath $ProjectRoot), [StringComparison]::OrdinalIgnoreCase)) { "PROJECT" } else { "UNKNOWN" }
+            $scope = if ($ProjectRoot -and (Test-SkillPathAtOrWithinRoot -Path (Get-CanonicalPath $_) -Root (Get-CanonicalPath $ProjectRoot))) { "PROJECT" } else { "UNKNOWN" }
             [pscustomobject]@{ Path = Get-CanonicalPath $_; Scope = $scope }
         })
     }
@@ -150,11 +150,11 @@ function Invoke-SkillScan {
         @(Get-DefaultSkillRoots -ProjectRoot $ProjectRoot)           # Standard roots carry USER/SYSTEM/PROJECT evidence.
     }
 
-    $recordsByIdentity = [ordered]@{}                               # Physical SKILL.md path is the deduplication key.
+    $recordsByIdentity = [Collections.Specialized.OrderedDictionary]::new((Get-SkillPathStringComparer)) # Physical SKILL.md identity follows host case rules.
     foreach ($root in $rootRecords) {
         foreach ($activePath in Get-ActivationSkillPaths -Root $root.Path) {
             $record = New-SkillRecord -ActivePath $activePath -Scope $root.Scope
-            $identity = (Join-Path $record.physicalPath "SKILL.md").ToLowerInvariant()
+            $identity = Get-NormalizedSkillPath -Path (Join-Path $record.physicalPath "SKILL.md") # Never lowercase distinct Linux files.
             if ($recordsByIdentity.Contains($identity)) {           # Preserve every alias without duplicating the physical asset.
                 $existing = $recordsByIdentity[$identity]
                 $existing.activePaths = @($existing.activePaths + $activePath | Sort-Object -Unique)
@@ -178,12 +178,11 @@ function Invoke-SkillScan {
 
     $allNameGroups = @($records | Group-Object name)               # Name identity is a separate view from physical file identity.
     $activationAliasCount = (@($records | ForEach-Object { [math]::Max(0, @($_.activePaths).Count - 1) }) | Measure-Object -Sum).Sum
-    $topLevelIdentities = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $topLevelIdentities = [Collections.Generic.HashSet[string]]::new((Get-SkillPathStringComparer))
     foreach ($record in $records) {
         foreach ($activePath in $record.activePaths) {
             foreach ($root in $rootRecords.Path) {
-                $rootPrefix = $root.TrimEnd("\") + "\"         # Prefix comparison prevents a sibling root from matching by text alone.
-                if (-not $activePath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) { continue }
+                if (-not (Test-SkillPathWithinRoot -Path $activePath -Root $root)) { continue } # Strict containment rejects sibling prefixes and direct-root entries.
                 $relative = [IO.Path]::GetRelativePath($root, $activePath)
                 if (@($relative -split "[\\/]").Count -eq 1) { $null = $topLevelIdentities.Add($record.physicalPath) }
             }
@@ -213,7 +212,7 @@ function Invoke-SkillScan {
     $registry = [pscustomobject]@{
         schemaVersion = 1                                          # Increment only when field semantics become incompatible.
         generatedAt = (Get-Date).ToString("o")                      # Local offset is retained for cross-session evidence.
-        generator = "skill-lifecycle-manager/1.2.0"                # Version 1.2 adds evidence-backed capability governance.
+        generator = "skill-lifecycle-manager/1.3.0"                # Version 1.3 adds host-aware paths and activity links without changing schema v1.
         roots = @($rootRecords.Path | Sort-Object -Unique)          # Record exactly which live surfaces were inspected.
         summary = $summary                                          # Compact health and classification counts.
         skills = $records                                           # Full evidence records remain the Registry source of truth.

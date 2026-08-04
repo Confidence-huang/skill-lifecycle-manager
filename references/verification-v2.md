@@ -44,14 +44,14 @@ parsed with PowerShell's built-in JSON parser.
   "requiredLayers": ["static", "runtime", "behavior"],
   "runtime": {
     "command": "pwsh",
-    "arguments": ["-NoProfile", "-File", "{skillRoot}\\tests\\runtime.ps1"],
+    "arguments": ["-NoProfile", "-File", "{skillRoot}/tests/runtime.ps1"],
     "timeoutSeconds": 30,
     "runOnInstall": true,
     "expect": {"exitCode": 0, "stdoutJsonEquals": {"status": "PASS"}}
   },
   "behavior": {
     "command": "pwsh",
-    "arguments": ["-NoProfile", "-File", "{skillRoot}\\tests\\behavior.ps1"],
+    "arguments": ["-NoProfile", "-File", "{skillRoot}/tests/behavior.ps1"],
     "timeoutSeconds": 120,
     "runOnInstall": true,
     "expect": {"exitCode": 0, "stdoutJsonEquals": {"status": "PASS"}}

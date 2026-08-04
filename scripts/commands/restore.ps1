@@ -1,6 +1,6 @@
 <#
 Verified restore into an empty destination.
-Every backup file is hash-checked before copying; recorded junctions are reported for manual review
+Every backup file is hash-checked before copying; recorded filesystem links are reported for manual review
 instead of silently recreating absolute links that may target the wrong machine.
 Call example: Restore-AICapabilities -BackupPath "D:\backups\ai-capabilities-..." -DestinationRoot "D:\restored" -Apply
 #>

@@ -16,9 +16,9 @@ function Copy-CapabilityTree {
         [Parameter(Mandatory)][AllowEmptyCollection()][Collections.Generic.List[object]]$Links
     )
 
-    $source = Get-CanonicalPath -Path $SourceRoot                   # Canonical source identity is retained in the manifest.
+    $source = Get-NormalizedSkillPath -Path $SourceRoot            # Preserve a selected link root instead of dereferencing its target.
     New-Item -ItemType Directory -Path $DestinationRoot -Force | Out-Null
-    $items = [Collections.Generic.List[object]]::new()              # Explicit enumeration lets us stop before entering any junction.
+    $items = [Collections.Generic.List[object]]::new()              # Explicit enumeration lets us stop before entering any filesystem link.
     $pendingDirectories = [Collections.Generic.Stack[object]]::new() # The stack contains physical directories that are safe to enumerate.
     $sourceItem = Get-Item -Force -LiteralPath $source
     $items.Add($sourceItem)                                        # Keep the selected root itself in the manifest or link records.
@@ -30,14 +30,14 @@ function Copy-CapabilityTree {
         foreach ($child in Get-ChildItem -Force -LiteralPath $directory.FullName) {
             $items.Add($child)                                     # Every direct child is copied or recorded exactly once.
             $isPhysicalDirectory = $child.PSIsContainer -and -not ($child.Attributes -band [IO.FileAttributes]::ReparsePoint)
-            if ($isPhysicalDirectory) { $pendingDirectories.Push($child) } # Junction descendants never enter the traversal stack.
+            if ($isPhysicalDirectory) { $pendingDirectories.Push($child) } # Link descendants never enter the traversal stack.
         }
     }
     foreach ($item in $items) {
         $relative = if ($item.FullName -eq $source) { "." } else { [IO.Path]::GetRelativePath($source, $item.FullName) }
         if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
             $Links.Add([pscustomobject]@{ sourceRoot = $source; relativePath = $relative; linkType = [string]$item.LinkType; target = [string]::Join(";", @($item.Target)) })
-            continue                                                # Never follow a junction into duplicated or external content.
+            continue                                                # Never follow a link into duplicated or external content.
         }
         if ($item.PSIsContainer) {
             $directory = if ($relative -eq ".") { $DestinationRoot } else { Join-Path $DestinationRoot $relative }
@@ -85,7 +85,7 @@ function Backup-AICapabilities {
         foreach ($path in $existingPaths) {
             $index += 1                                             # Index prevents equal leaf names from colliding in the backup.
             $leaf = Split-Path -Leaf (Get-CanonicalPath $path)
-            $destination = Join-Path $backupPath ("data\{0:D2}-{1}" -f $index, $leaf)
+            $destination = Join-Path $backupPath ("data/{0:D2}-{1}" -f $index, $leaf)
             Copy-CapabilityTree -SourceRoot $path -DestinationRoot $destination -BackupRoot $backupPath -Files $files -Links $links
         }
         $manifest = [pscustomobject]@{

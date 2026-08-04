@@ -1,7 +1,7 @@
 <#
 Transactional Skill installation from a local directory or complete Git source.
 PACKAGE copies one self-contained Skill; SOURCE keeps a complete one-entry repository; HYBRID keeps
-the complete repository and activates one selected entry through a junction.
+the complete repository and activates one selected entry through the current host's supported link.
 Call example: Install-SkillAsset -Source "https://github.com/owner/repo.git" -Mode Source -Apply
 #>
 
@@ -64,7 +64,7 @@ function Install-SkillAsset {
         [string]$Name,                                               # Optional activity name override; frontmatter is preferred.
         [string]$SkillPath,                                          # Relative Skill directory for a multi-entry repository.
         [string]$Ref,                                                # Optional Git ref, resolved to a full commit after clone.
-        [Parameter(Mandatory)][string]$SkillHome,                    # Physical packages and source/hybrid activity junctions live here.
+        [Parameter(Mandatory)][string]$SkillHome,                    # Physical packages and source/hybrid activity links live here.
         [Parameter(Mandatory)][string]$SourceHome,                   # Complete Git repositories live outside activity roots.
         [Parameter(Mandatory)][string]$StagingHome,                  # Temporary inspection and clone paths are transaction-owned.
         [Parameter(Mandatory)][string]$RegistryDirectory,           # Successful installation regenerates canonical state.
@@ -84,10 +84,10 @@ function Install-SkillAsset {
         $entryCount = @(Get-SkillEntryFiles -Root $inspection.Root).Count
         $resolvedMode = $Mode.ToUpperInvariant()
         if ($resolvedMode -eq "AUTO") {
-            $resolvedMode = if (-not $git.IsRepository) { "PACKAGE" } elseif ($entryCount -eq 1 -and $selectedRoot.TrimEnd("\") -eq $git.Root.TrimEnd("\")) { "SOURCE" } else { "HYBRID" }
+            $resolvedMode = if (-not $git.IsRepository) { "PACKAGE" } elseif ($entryCount -eq 1 -and (Test-SameSkillPath -Left $selectedRoot -Right $git.Root)) { "SOURCE" } else { "HYBRID" }
         }
         if ($resolvedMode -in @("SOURCE", "HYBRID") -and -not $git.IsRepository) { throw "BLOCKED: $resolvedMode mode requires a complete Git repository." }
-        if ($resolvedMode -eq "SOURCE" -and ($entryCount -ne 1 -or $selectedRoot.TrimEnd("\") -ne $git.Root.TrimEnd("\"))) { throw "BLOCKED: Source mode requires one repository-root Skill; use Hybrid." }
+        if ($resolvedMode -eq "SOURCE" -and ($entryCount -ne 1 -or -not (Test-SameSkillPath -Left $selectedRoot -Right $git.Root))) { throw "BLOCKED: Source mode requires one repository-root Skill; use Hybrid." }
 
         $activityName = if ($Name) { $Name } else { $metadata.Name } # Frontmatter remains the default discovery identity.
         if ($activityName -notmatch "^[a-z0-9-]{1,64}$") { throw "BLOCKED: Activity name must use 1-64 lowercase letters, digits, or hyphens." }
@@ -148,7 +148,7 @@ function Install-SkillAsset {
             $installedSkill = if ($relativeSkill -eq ".") { $sourcePath } else { Join-Path $sourcePath $relativeSkill }
             $installedMetadata = Read-SkillMetadata -SkillFile (Join-Path $installedSkill "SKILL.md")
             if ($installedMetadata.Status -ne "PASS") { throw "Installed Skill failed post-clone validation." }
-            New-Item -ItemType Junction -Path $activityPath -Target $installedSkill | Out-Null # Activate only after source validation passes.
+            New-SkillActivityLink -Path $activityPath -Target $installedSkill | Out-Null # Activate with Junction on Windows or SymbolicLink on Linux.
             $createdPaths.Add($activityPath)
             $plan.commit = $installedCommit                         # Report the exact final clone rather than the inspection copy.
         }
@@ -163,12 +163,12 @@ function Install-SkillAsset {
     }
     catch {
         for ($index = $createdPaths.Count - 1; $index -ge 0; $index -= 1) {
-            $path = $createdPaths[$index]                            # Reverse creation order removes activity junction before source data.
+            $path = $createdPaths[$index]                            # Reverse creation order removes the activity link before source data.
             if (Test-Path -LiteralPath $path) {
-                $root = if ($path.StartsWith([IO.Path]::GetFullPath($SkillHome), [StringComparison]::OrdinalIgnoreCase)) { $SkillHome } else { $SourceHome }
+                $root = if (Test-SkillPathWithinRoot -Path $path -Root $SkillHome) { $SkillHome } else { $SourceHome }
                 Assert-PathWithinRoot -Path $path -Root $root        # Cleanup cannot escape the activity or source home.
                 $item = Get-Item -Force -LiteralPath $path
-                if ($item.LinkType) { Remove-Item -LiteralPath $path -Force } else { Remove-Item -LiteralPath $path -Recurse -Force } # Never recurse through a junction target.
+                if ($item.LinkType) { Remove-Item -LiteralPath $path -Force } else { Remove-Item -LiteralPath $path -Recurse -Force } # Never recurse through an activity-link target.
             }
         }
         throw

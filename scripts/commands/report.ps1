@@ -32,7 +32,7 @@ function Write-SkillCapabilityReport {
     $lines.Add("| Unique names | $($registry.summary.inventory.uniqueNames) | Exact frontmatter names; semantic overlap is not inferred. |")
     $lines.Add("| Top-level entries | $($registry.summary.inventory.topLevelEntries) | Direct children of scanned activation roots, closest to a conventional user install list. |")
     $lines.Add("| Nested entries | $($registry.summary.inventory.nestedEntries) | Parent-Skill steps, Codex system internals, and plugin-contained Skills. |")
-    $lines.Add("| Activation aliases | $($registry.summary.inventory.activationAliases) | Extra junction or compatibility paths already excluded from the physical count. |")
+    $lines.Add("| Activation aliases | $($registry.summary.inventory.activationAliases) | Extra activity-link or compatibility paths already excluded from the physical count. |")
     $lines.Add("| Name-collision groups | $($registry.summary.inventory.nameCollisionGroups) | Exact names backed by multiple physical entities. |")
     $lines.Add("")
     $lines.Add("> Physical entries are not Codex Desktop rows. Desktop may namespace, rename, hide, or selectively expose plugin and template Skills.")

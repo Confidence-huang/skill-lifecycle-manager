@@ -2,6 +2,9 @@
 
 The JSON Registry is the canonical machine-readable state. The YAML file beside it is a generated human-readable mirror.
 
+Registry paths describe one live host. Generate fresh Registry and stability evidence on Linux; a
+Windows Registry with D-drive paths is historical input, not current Linux state.
+
 ## Top-level fields
 
 | Field | Meaning |
@@ -50,7 +53,7 @@ The JSON Registry is the canonical machine-readable state. The YAML file beside 
 
 | Field | Meaning |
 |---|---|
-| `physicalEntries` | Resolved physical `SKILL.md` entities after junction aliases are deduplicated. |
+| `physicalEntries` | Resolved physical `SKILL.md` entities after activity-link aliases are deduplicated. |
 | `uniqueNames` | Exact frontmatter names; no semantic-equivalence inference is made. |
 | `topLevelEntries` | Entries directly below a scanned activation root. |
 | `nestedEntries` | Entries nested inside parent Skills, system directories, or plugin packages. |

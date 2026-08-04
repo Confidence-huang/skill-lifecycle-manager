@@ -1,8 +1,9 @@
 <#
-Shared Skill asset facts and safe file operations.
+Shared Skill asset facts, host layout, and safe file operations.
 The command files dot-source this script so scanning, installation, updating, backup, and restore
-use one definition of Skill identity, frontmatter validity, Git provenance, and path containment.
-Call example: . "$PSScriptRoot\skill-state.ps1"; Read-SkillMetadata -SkillFile "C:\skill\SKILL.md"
+use one definition of Skill identity, frontmatter validity, Git provenance, path containment, and
+SOURCE/HYBRID activity links on both Windows and Linux.
+Call example: . "$PSScriptRoot/skill-state.ps1"; Get-SkillHostLayout
 #>
 
 Set-StrictMode -Version Latest                                      # Turn accidental nulls and misspelled properties into visible failures.
@@ -15,6 +16,146 @@ $script:IgnoredSkillSegments = @(                                  # Exclude emb
 )
 
 
+# --- Select the current host's path comparison rule ---
+function Get-SkillPathComparison {
+    if ($IsWindows) { return [StringComparison]::OrdinalIgnoreCase } # NTFS activity paths keep their established case-insensitive identity.
+    return [StringComparison]::Ordinal                              # Linux paths remain distinct when their letter case differs.
+}
+
+
+# --- Select the current host's path collection comparer ---
+function Get-SkillPathStringComparer {
+    if ($IsWindows) { return [StringComparer]::OrdinalIgnoreCase }  # Dictionaries and hash sets must agree with direct path checks.
+    return [StringComparer]::Ordinal                               # POSIX identities must not be lowercased before deduplication.
+}
+
+
+# --- Normalize a path without removing its filesystem root ---
+function Get-NormalizedSkillPath {
+    param([Parameter(Mandatory)][string]$Path)                       # Existing and planned paths both need stable textual comparison.
+
+    $fullPath = [IO.Path]::GetFullPath($Path)                      # Collapse relative segments with the current host's path rules.
+    $pathRoot = [IO.Path]::GetPathRoot($fullPath)                  # `/`, drive roots, and UNC roots must never trim into an empty string.
+    if ($fullPath.Length -gt $pathRoot.Length) {
+        $separators = [char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+        $fullPath = $fullPath.TrimEnd($separators)                 # One canonical suffix keeps equality and prefix checks consistent.
+    }
+    return $fullPath                                               # Output retains the original case on every host.
+}
+
+
+# --- Compare two paths using the current filesystem identity rule ---
+function Test-SameSkillPath {
+    param(
+        [Parameter(Mandatory)][string]$Left,                         # First existing or planned filesystem identity.
+        [Parameter(Mandatory)][string]$Right                         # Second identity compared without resolving links.
+    )
+
+    $leftPath = Get-NormalizedSkillPath -Path $Left                # Normalize separators and dot segments before equality.
+    $rightPath = Get-NormalizedSkillPath -Path $Right
+    return $leftPath.Equals($rightPath, (Get-SkillPathComparison)) # Windows folds case; Linux deliberately does not.
+}
+
+
+# --- Check whether one path is at or below a declared root ---
+function Test-SkillPathAtOrWithinRoot {
+    param(
+        [Parameter(Mandatory)][string]$Path,                         # Candidate filesystem identity.
+        [Parameter(Mandatory)][string]$Root                          # Root whose own identity is also accepted.
+    )
+
+    $fullPath = Get-NormalizedSkillPath -Path $Path                # Planned transaction paths may not exist yet.
+    $fullRoot = Get-NormalizedSkillPath -Path $Root
+    if ($fullPath.Equals($fullRoot, (Get-SkillPathComparison))) { return $true } # Project-root classification accepts the root itself.
+    $prefix = $fullRoot + [IO.Path]::DirectorySeparatorChar        # A separator rejects lookalike siblings such as `skills-other`.
+    return $fullPath.StartsWith($prefix, (Get-SkillPathComparison))
+}
+
+
+# --- Check whether one path is a strict child of a declared root ---
+function Test-SkillPathWithinRoot {
+    param(
+        [Parameter(Mandatory)][string]$Path,                         # Candidate file or directory below the owner root.
+        [Parameter(Mandatory)][string]$Root                          # Owner root itself is not a removable transaction child.
+    )
+
+    if (Test-SameSkillPath -Left $Path -Right $Root) { return $false } # Destructive operations must never target the owner root itself.
+    return Test-SkillPathAtOrWithinRoot -Path $Path -Root $Root
+}
+
+
+# --- Resolve one optional absolute XDG root ---
+function Get-SkillEnvironmentRoot {
+    param(
+        [Parameter(Mandatory)][string]$Name,                         # XDG variable name read without changing the process environment.
+        [Parameter(Mandatory)][string]$Fallback                      # Absolute user-profile fallback used when the variable is absent.
+    )
+
+    $configured = [Environment]::GetEnvironmentVariable($Name)     # Empty variables follow the documented XDG fallback behavior.
+    if (-not $configured) { return Get-NormalizedSkillPath -Path $Fallback }
+    if (-not [IO.Path]::IsPathRooted($configured)) { throw "BLOCKED: $Name must contain an absolute path." }
+    return Get-NormalizedSkillPath -Path $configured               # Host-local defaults remain explicit in help and command output.
+}
+
+
+# --- Return the current host's default lifecycle layout ---
+function Get-SkillHostLayout {
+    if ($IsWindows) {
+        return [pscustomobject]@{
+            platform = "windows"                                  # Existing D-drive locations remain byte-for-byte compatible.
+            skillHome = "D:\CodexProjects\_skills\agents\skills"
+            sourceHome = "D:\CodexProjects\_skills\sources"
+            stagingHome = "D:\CodexProjects\_skills\staging"
+            registryDirectory = "D:\CodexProjects\_skills\registry"
+            backupRoot = "D:\CodexProjects\_skills\backups"
+            activityLinkType = "Junction"
+        }
+    }
+
+    if (-not $IsLinux) { throw "BLOCKED: This release supports Windows and Linux hosts only." } # macOS needs its own accepted link and layout evidence.
+
+    $userProfile = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+    if (-not $userProfile) { throw "BLOCKED: The current user profile path is unavailable." }
+    $dataHome = Get-SkillEnvironmentRoot -Name "XDG_DATA_HOME" -Fallback (Join-Path $userProfile ".local/share")
+    $stateHome = Get-SkillEnvironmentRoot -Name "XDG_STATE_HOME" -Fallback (Join-Path $userProfile ".local/state")
+    $cacheHome = Get-SkillEnvironmentRoot -Name "XDG_CACHE_HOME" -Fallback (Join-Path $userProfile ".cache")
+    $dataRoot = Join-Path $dataHome "skill-lifecycle-manager"      # Sources and backups are durable user-owned lifecycle data.
+    return [pscustomobject]@{
+        platform = "linux"                                        # The current release accepts Linux as the non-Windows target.
+        skillHome = Join-Path $userProfile ".agents/skills"        # Codex and cross-Agent user Skills use the established shared root.
+        sourceHome = Join-Path $dataRoot "sources"
+        stagingHome = Join-Path (Join-Path $cacheHome "skill-lifecycle-manager") "staging"
+        registryDirectory = Join-Path $stateHome "skill-lifecycle-manager"
+        backupRoot = Join-Path $dataRoot "backups"
+        activityLinkType = "SymbolicLink"
+    }
+}
+
+
+# --- Create one SOURCE/HYBRID activity link for the current host ---
+function New-SkillActivityLink {
+    param(
+        [Parameter(Mandatory)][string]$Path,                         # New activity entry below the approved Skill home.
+        [Parameter(Mandatory)][string]$Target                        # Validated physical Skill directory in the source repository.
+    )
+
+    $linkType = (Get-SkillHostLayout).activityLinkType             # Windows uses Junction; Linux uses SymbolicLink.
+    return New-Item -ItemType $linkType -Path $Path -Target $Target # Caller owns collision checks and transaction rollback.
+}
+
+
+# --- Resolve one filesystem link target into an absolute path ---
+function Get-SkillLinkTargetPath {
+    param([Parameter(Mandatory)][object]$Item)                       # FileSystemInfo must expose one target for a managed activity entry.
+
+    $targets = @($Item.Target)
+    if ($targets.Count -ne 1 -or -not $targets[0]) { throw "BLOCKED: Activity link '$($Item.FullName)' must expose exactly one target." }
+    $target = [string]$targets[0]
+    if (-not [IO.Path]::IsPathRooted($target)) { $target = Join-Path $Item.Parent.FullName $target } # Linux links may store a relative target.
+    return Get-NormalizedSkillPath -Path $target                   # The target need not be dereferenced until its caller requests evidence.
+}
+
+
 # --- Normalize an existing path ---
 function Get-CanonicalPath {
     param([Parameter(Mandatory)][string]$Path)                       # Path must exist so identity is based on live filesystem evidence.
@@ -24,30 +165,28 @@ function Get-CanonicalPath {
 }
 
 
-# --- Resolve every junction component in a Skill path ---
+# --- Resolve every filesystem-link component in a Skill path ---
 function Resolve-SkillPhysicalPath {
-    param([Parameter(Mandatory)][string]$Path)                       # A nested entry may sit below a junction rather than be one itself.
+    param([Parameter(Mandatory)][string]$Path)                       # A nested entry may sit below an activity link rather than be one itself.
 
     $canonicalPath = Get-CanonicalPath -Path $Path                  # Normalize dot segments before walking each path component.
     $pathRoot = [IO.Path]::GetPathRoot($canonicalPath)               # Preserve the drive or UNC root while resolving descendants.
-    $relative = $canonicalPath.Substring($pathRoot.Length)          # Each component can independently redirect through a junction.
+    $relative = $canonicalPath.Substring($pathRoot.Length)          # Each component can independently redirect through a filesystem link.
     $components = @($relative -split "[\\/]" | Where-Object { $_ })
     $current = $pathRoot                                             # Build the physical path from left to right.
     foreach ($component in $components) {
         $candidate = Join-Path $current $component                  # Candidate exists because the original full path resolved.
         $item = Get-Item -Force -LiteralPath $candidate
         if ($item.LinkType) {
-            $target = [string]$item.Target                          # Windows junctions normally expose one absolute target.
-            if (-not [IO.Path]::IsPathRooted($target)) { $target = Join-Path $item.Parent.FullName $target }
-            $current = Get-CanonicalPath -Path $target              # Resolve the first redirection before checking chained junctions.
+            $target = Get-SkillLinkTargetPath -Item $item           # Windows Junctions and Linux SymbolicLinks share one target contract.
+            $current = Get-CanonicalPath -Path $target              # Resolve the first redirection before checking chained links.
             for ($linkDepth = 0; $linkDepth -lt 16; $linkDepth += 1) {
                 $targetItem = Get-Item -Force -LiteralPath $current
-                if (-not $targetItem.LinkType) { break }            # Physical directory ends the junction chain.
-                $nextTarget = [string]$targetItem.Target
-                if (-not [IO.Path]::IsPathRooted($nextTarget)) { $nextTarget = Join-Path $targetItem.Parent.FullName $nextTarget }
+                if (-not $targetItem.LinkType) { break }            # Physical directory ends the compatibility-link chain.
+                $nextTarget = Get-SkillLinkTargetPath -Item $targetItem
                 $current = Get-CanonicalPath -Path $nextTarget      # Follow compatibility chains such as Codex -> agents -> sources.
             }
-            if ((Get-Item -Force -LiteralPath $current).LinkType) { throw "BLOCKED: Junction chain exceeded 16 links at '$Path'." }
+            if ((Get-Item -Force -LiteralPath $current).LinkType) { throw "BLOCKED: Activity-link chain exceeded 16 links at '$Path'." }
         }
         else {
             $current = $candidate                                   # Ordinary component preserves the current physical chain.
@@ -64,10 +203,9 @@ function Assert-PathWithinRoot {
         [Parameter(Mandatory)][string]$Root                          # Narrow owner directory approved for that transaction.
     )
 
-    $fullPath = [IO.Path]::GetFullPath($Path)                        # Normalization closes `..` and relative-path escape routes.
-    $fullRoot = [IO.Path]::GetFullPath($Root).TrimEnd("\")         # A consistent root suffix makes prefix comparison unambiguous.
-    $prefix = $fullRoot + [IO.Path]::DirectorySeparatorChar         # Prevent `C:\root-other` from matching `C:\root`.
-    if (-not $fullPath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+    $fullPath = Get-NormalizedSkillPath -Path $Path                # Normalization closes `..` and relative-path escape routes.
+    $fullRoot = Get-NormalizedSkillPath -Path $Root                # Host comparison rules preserve Linux case-sensitive safety.
+    if (-not (Test-SkillPathWithinRoot -Path $fullPath -Root $fullRoot)) {
         throw "BLOCKED: '$fullPath' is outside approved root '$fullRoot'."
     }
 }
@@ -80,7 +218,7 @@ function Get-SkillEntryFiles {
     $canonicalRoot = Get-CanonicalPath -Path $Root                  # Use one prefix when calculating relative segments.
     $skillFiles = Get-ChildItem -LiteralPath $canonicalRoot -Filter "SKILL.md" -File -Recurse -Force
     return @($skillFiles | Where-Object {
-        $relative = $_.FullName.Substring($canonicalRoot.Length).TrimStart("\") # Compare only directory segments beneath the root.
+        $relative = [IO.Path]::GetRelativePath($canonicalRoot, $_.FullName) # Runtime separators keep the exclusion check cross-platform.
         $segments = @($relative -split "[\\/]")                  # Windows and imported POSIX paths use the same exclusion check.
         $directorySegments = if ($segments.Count -gt 1) { $segments[0..($segments.Count - 2)] } else { @() }
         -not (@($directorySegments | Where-Object { $_ -in $script:IgnoredSkillSegments -or $_ -like ".venv*" }).Count)
@@ -151,7 +289,7 @@ function Read-SkillMetadata {
 function Get-GitFacts {
     param([Parameter(Mandatory)][string]$Path)                       # Any path inside a repository is accepted.
 
-    $topLevel = (& git -C $Path rev-parse --show-toplevel 2>$null)  # Git itself resolves worktrees and junction-backed repositories.
+    $topLevel = (& git -C $Path rev-parse --show-toplevel 2>$null)  # Git itself resolves worktrees and link-backed repositories.
     if ($LASTEXITCODE -ne 0 -or -not $topLevel) {                   # A package directory legitimately has no Git owner.
         return [pscustomobject]@{ IsRepository = $false; Root = $null; Branch = $null; Commit = $null; Remote = $null; IsClean = $null }
     }
@@ -217,18 +355,31 @@ function Get-DefaultSkillRoots {
     param([string]$ProjectRoot)                                     # Optional project root adds project-local activation locations.
 
     $roots = [Collections.Generic.List[object]]::new()              # Each root carries scope evidence instead of guessing from a Skill name.
-    $candidates = @(
-        [pscustomobject]@{ Path = "D:\CodexProjects\_skills\agents\skills"; Scope = "USER" },
-        [pscustomobject]@{ Path = "D:\CodexProjects\_skills\codex\skills"; Scope = "USER" },
-        [pscustomobject]@{ Path = "D:\CodexProjects\_skills\codex\plugins-cache"; Scope = "SYSTEM" }
-    )
+    $layout = Get-SkillHostLayout                                  # Central host facts prevent command files from embedding path policy.
+    if ($IsWindows) {
+        $candidates = @(
+            [pscustomobject]@{ Path = $layout.skillHome; Scope = "USER" },
+            [pscustomobject]@{ Path = "D:\CodexProjects\_skills\codex\skills"; Scope = "USER" },
+            [pscustomobject]@{ Path = "D:\CodexProjects\_skills\codex\plugins-cache"; Scope = "SYSTEM" }
+        )
+    }
+    else {
+        $userProfile = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+        $candidates = @(
+            [pscustomobject]@{ Path = $layout.skillHome; Scope = "USER" },
+            [pscustomobject]@{ Path = Join-Path $userProfile ".codex/skills"; Scope = "USER" },
+            [pscustomobject]@{ Path = Join-Path $userProfile ".claude/skills"; Scope = "USER" },
+            [pscustomobject]@{ Path = Join-Path $userProfile ".config/opencode/skills"; Scope = "USER" },
+            [pscustomobject]@{ Path = Join-Path $userProfile ".codex/plugins/cache"; Scope = "SYSTEM" }
+        )
+    }
     foreach ($candidate in $candidates) {                           # Missing optional roots are omitted rather than reported as false failures.
         if (Test-Path -LiteralPath $candidate.Path -PathType Container) { $roots.Add($candidate) }
     }
 
     if ($ProjectRoot) {                                             # Project Skills are discovered only when a concrete project is in scope.
         $project = Get-CanonicalPath -Path $ProjectRoot
-        foreach ($relative in @(".agents\skills", ".codex\skills", ".skills")) {
+        foreach ($relative in @(".agents/skills", ".codex/skills", ".skills")) {
             $candidatePath = Join-Path $project $relative           # Use known project-local conventions, not a recursive drive scan.
             if (Test-Path -LiteralPath $candidatePath -PathType Container) {
                 $roots.Add([pscustomobject]@{ Path = $candidatePath; Scope = "PROJECT" })
@@ -236,4 +387,32 @@ function Get-DefaultSkillRoots {
         }
     }
     return @($roots)
+}
+
+
+# --- Return existing roots used by a default capability backup ---
+function Get-DefaultCapabilityBackupRoots {
+    param([Parameter(Mandatory)][object]$Layout)                    # CLI passes the already-resolved host layout to keep one decision source.
+
+    if ($IsWindows) {
+        $candidates = @(
+            $Layout.skillHome,
+            "D:\CodexProjects\_skills\codex\skills",
+            $Layout.sourceHome,
+            $Layout.registryDirectory,
+            "C:\Users\Lenovo\.codex\global_rules",
+            "C:\Users\Lenovo\.codex\memories"
+        )
+    }
+    else {
+        $userProfile = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+        $candidates = @(
+            $Layout.skillHome,
+            (Join-Path $userProfile ".codex/skills"),
+            $Layout.sourceHome,
+            $Layout.registryDirectory,
+            (Join-Path $userProfile ".codex/memories")
+        )
+    }
+    return @($candidates | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object { Get-NormalizedSkillPath -Path $_ } | Sort-Object -Unique)
 }

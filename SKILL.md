@@ -1,6 +1,6 @@
 ---
 name: skill-lifecycle-manager
-description: Manage and govern the complete lifecycle of Codex and cross-agent Skills on Windows with PowerShell 7. Use when Codex needs to inventory or classify Skills, generate the canonical Skill Registry, run layered Static, Runtime, and Behavior Health verification, build an evidence-backed capability graph, freeze a verified stable-use baseline, validate a project's declared Skill working set, install or update a managed Skill, create a capability backup, or restore into an empty destination. Distinguishes asset scope, lifecycle mode, observed governance state, and unknown assessment evidence without inventing quality or usage scores.
+description: Manage and govern the complete lifecycle of Codex and cross-agent Skills on Windows and Linux with PowerShell 7. Use when Codex needs to inventory or classify Skills, generate the canonical Skill Registry, run layered Static, Runtime, and Behavior Health verification, build an evidence-backed capability graph, freeze a verified stable-use baseline, validate a project's declared Skill working set, install or update a managed Skill, create a capability backup, or restore into an empty destination. Distinguishes asset scope, lifecycle mode, observed governance state, and unknown assessment evidence without inventing quality or usage scores.
 ---
 
 # Skill Lifecycle Manager
@@ -20,7 +20,7 @@ Keep two classifications separate:
 4. Treat output labels literally: `PASS` is verified, `BLOCKED` prevents the requested mutation, and `UNKNOWN` needs more evidence.
 5. Use the default preview first when the target or effect is not already explicit. Add `-Apply` to perform the exact reported mutation.
 6. Never replace an existing active entry. Resolve or remove the collision as a separate, explicitly scoped task.
-7. Preserve one physical active entity. Use a junction for SOURCE/HYBRID activation and a physical directory for PACKAGE activation.
+7. Preserve one physical active entity. Use the host-supported activity link for SOURCE/HYBRID (`Junction` on Windows, `SymbolicLink` on Linux) and a physical directory for PACKAGE activation.
 8. Pin Git-backed installations to the resolved full commit SHA. A branch is only an update channel.
 9. Update with `fetch -> compare -> detached candidate validation -> fast-forward`, never with an unchecked `git pull`.
 10. Keep backup and restore targets explicit. Restore only into an empty destination.
@@ -32,7 +32,7 @@ Keep two classifications separate:
 Use [scripts/skill.ps1](scripts/skill.ps1) as the single entrypoint:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command help
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command help
 ```
 
 The command reports JSON so both a human and another agent can inspect exact paths, modes, commits, and stop reasons.
@@ -42,28 +42,30 @@ The command reports JSON so both a human and another agent can inspect exact pat
 Preview the live inventory:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command scan
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command scan
 ```
 
 Generate the canonical JSON Registry plus a readable YAML mirror:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command registry -Apply
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command registry -Apply
 ```
 
-Default Registry location:
+Default Registry location is host-local:
 
 ```text
-D:\CodexProjects\_skills\registry\skills-registry.json
-D:\CodexProjects\_skills\registry\skills-registry.yaml
+Windows: D:\CodexProjects\_skills\registry\skills-registry.json
+Linux:   $XDG_STATE_HOME/skill-lifecycle-manager/skills-registry.json
+         (fallback: ~/.local/state/skill-lifecycle-manager/skills-registry.json)
 ```
 
 The JSON file is canonical. The YAML file is a generated mirror and must not be edited independently. Read [references/registry-schema.md](references/registry-schema.md) before consuming fields programmatically.
+Read [references/cross-platform-v3.md](references/cross-platform-v3.md) before moving state between hosts or claiming Linux acceptance.
 
 Generate the human-facing count and collision report after the Registry is current:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command report -Apply
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command report -Apply
 ```
 
 The report explains physical entries, exact names, top-level activations, nested Skills, aliases, and collisions. It does not claim that the physical count equals the Codex Desktop list size.
@@ -73,13 +75,13 @@ The report explains physical entries, exact names, top-level activations, nested
 Preview the live capability graph, evidence readiness, and observed lifecycle states:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command governance
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command governance
 ```
 
 Refresh the canonical Registry and generate `skill-governance-report.md`:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command governance -Apply
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command governance -Apply
 ```
 
 Governance never fabricates A/B grades. `evidenceReadinessScore` covers only metadata, activation, maintenance mode, provenance, and collision evidence. Quality, usage, and security remain `UNKNOWN` until real evaluation, telemetry, and audits exist. Read [references/governance.md](references/governance.md) before using governance fields for decisions.
@@ -89,20 +91,20 @@ Governance never fabricates A/B grades. `evidenceReadinessScore` covers only met
 Preview and freeze the current verified local baseline:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command stabilize
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command stabilize -Apply
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command stabilize
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command stabilize -Apply
 ```
 
 Run the daily or weekly read-only check:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command health
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command health
 ```
 
 Validate one real project's declared working set:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command health -ProjectRoot "D:\CodexProjects\Project_25 学习东西"
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command health -ProjectRoot "D:\CodexProjects\Project_25 学习东西"
 ```
 
 The stability baseline records local commits, Registry/report hashes, activity identity, and the latest complete backup. Health performs no writes and no remote fetch, so upstream freshness remains `UNKNOWN_NOT_FETCHED`. Project tiers are role labels only; they do not change discovery or imply quality. Read [references/stability.md](references/stability.md) before freezing or interpreting health output.
@@ -112,13 +114,13 @@ The stability baseline records local commits, Registry/report hashes, activity i
 Preview one activity entry without executing its probes:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command verify -Name bilibili-video-learning
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command verify -Name bilibili-video-learning
 ```
 
 Run its declared probes and persist a timestamped evidence report:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command verify -Name bilibili-video-learning -Apply
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command verify -Name bilibili-video-learning -Apply
 ```
 
 Use `-TargetSkill "<exact-skill-root>"` when verifying a candidate that is not yet in the Registry. A Skill without `skill.manifest.yaml` remains compatible: Static Health runs, while Runtime and Behavior report `NOT_CONFIGURED`. An opted-in manifest must use the documented JSON-compatible YAML subset and keep probes under `tests/`. Read [references/verification-v2.md](references/verification-v2.md) before authoring a manifest or interpreting `NOT_RUN`, `UNKNOWN`, and `BLOCKED`.
@@ -128,7 +130,7 @@ Use `-TargetSkill "<exact-skill-root>"` when verifying a candidate that is not y
 Install a self-contained local package:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" `
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" `
   -Command install `
   -Source "D:\incoming\my-skill" `
   -Mode Package `
@@ -138,7 +140,7 @@ pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" `
 Install a complete Git repository as a source-managed Skill:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" `
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" `
   -Command install `
   -Source "https://github.com/owner/repository.git" `
   -Mode Source `
@@ -148,11 +150,11 @@ pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" `
 Install one Skill from a multi-Skill repository:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" `
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" `
   -Command install `
   -Source "https://github.com/owner/repository.git" `
   -Mode Hybrid `
-  -SkillPath "skills\chosen-skill" `
+  -SkillPath "skills/chosen-skill" `
   -Apply
 ```
 
@@ -163,13 +165,13 @@ pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" `
 Preview one source-managed update:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command update -Name hop
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command update -Name hop
 ```
 
 Apply validated fast-forward updates to every eligible Registry entry:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command update -Name all -Apply
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command update -Name all -Apply
 ```
 
 An update stops for dirty worktrees, missing remotes/upstreams, non-fast-forward history, invalid candidate Skill entries, or duplicate Registry names. See [references/operations.md](references/operations.md) for mutation and rollback boundaries.
@@ -179,7 +181,7 @@ An update stops for dirty worktrees, missing remotes/upstreams, non-fast-forward
 Create a backup from explicitly supplied roots:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" `
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" `
   -Command backup `
   -Path "D:\CodexProjects\_skills\agents\skills","D:\CodexProjects\_skills\sources","D:\CodexProjects\_skills\registry" `
   -Apply
@@ -188,13 +190,13 @@ pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" `
 Preview restore into an empty destination, then repeat with `-Apply`:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" `
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" `
   -Command restore `
   -BackupPath "D:\CodexProjects\_skills\backups\ai-capabilities-YYYYMMDD-HHMMSS" `
   -DestinationRoot "D:\Restored-AI-Capabilities"
 ```
 
-Backups copy physical files once and record junctions separately. Restore recreates files and reports junctions as link records; it does not silently recreate absolute machine-specific links.
+Backups copy physical files once and record filesystem links separately. Restore recreates files and reports links for review; it does not silently recreate machine-specific targets.
 
 ## Completion checks
 
@@ -203,7 +205,7 @@ After any implementation or environment change:
 1. Run `scripts/test-skill.ps1` (v2 includes layered verification and failed-install rollback fixtures).
 2. Run the bundled `quick_validate.py` against this Skill directory.
 3. Regenerate the live Registry.
-4. Confirm the activity path is a junction to the clean source repository.
+4. Confirm the activity path uses the current host's expected link type and targets the clean source repository.
 5. Confirm Codex discovery returns `skill-lifecycle-manager` exactly once.
 6. Review the exact Git diff, stage only this Skill's files, and commit the verified atomic change.
 7. After committing a stable-use change, run `stabilize -Apply` once and confirm `health` passes against the committed manager HEAD.

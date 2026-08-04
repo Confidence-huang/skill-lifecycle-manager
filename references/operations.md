@@ -7,7 +7,7 @@
 3. Resolve PACKAGE, SOURCE, or HYBRID mode.
 4. Refuse an existing source or activity destination.
 5. Copy or clone the physical entity.
-6. Create a junction only after the physical source passes validation.
+6. Create the host-supported activity link only after the physical source passes validation.
 7. Run manifest layers explicitly marked `runOnInstall` and retain their evidence report.
 8. Publish the regenerated Registry only after required install probes pass.
 9. Remove only source/activity paths created by the failed transaction when an error occurs; retain diagnostic evidence and the previous Registry.
@@ -43,6 +43,6 @@ No worktree change occurs before the final fast-forward. A fetch or validation f
 - Require an empty destination.
 - Verify every backup file against the manifest before copying.
 - Restore physical files under destination subdirectories.
-- Emit junction records for manual review instead of recreating absolute links automatically.
+- Emit filesystem-link records for manual review instead of recreating machine-specific links automatically.
 
 This restore target is deliberately separate from the live environment. Switching a restored tree into production remains a distinct, explicit operation.

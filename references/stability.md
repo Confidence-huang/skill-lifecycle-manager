@@ -7,13 +7,13 @@ Stable operation begins only after inventory, governance, tests, Git, activity-l
 Preview first, then write one immutable baseline:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command stabilize
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command stabilize -Apply
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command stabilize
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command stabilize -Apply
 ```
 
 The command creates `skill-stability-baseline.json` beside the canonical Registry. It records:
 
-- the clean manager commit and activity junction;
+- the clean manager commit and host-supported activity link;
 - canonical Registry and generated-report hashes;
 - a deterministic physical-inventory fingerprint; Registry-file hashes separately protect scope and governance labels;
 - local commits and status fingerprints for SOURCE/HYBRID repositories;
@@ -25,16 +25,20 @@ It does not tag Git, create a branch, copy Skills, or alter the Registry schema.
 ## Run routine health
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command health
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command health
 ```
 
 Add `-ProjectRoot` to validate a project's `PROJECT_LOG.md` and `project-skill-profile.json` against the same global baseline:
 
 ```powershell
-pwsh -NoProfile -File "<skill-root>\scripts\skill.ps1" -Command health -ProjectRoot "D:\CodexProjects\Project_25 学习东西"
+pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command health -ProjectRoot "D:\CodexProjects\Project_25 学习东西"
 ```
 
 Health is always read-only. It scans live Skill identity, compares local Git and file evidence, checks the frozen recovery manifest, and returns structured JSON. It does not fetch remotes; therefore upstream freshness is reported as `UNKNOWN_NOT_FETCHED`, never as “no updates.”
+
+Baselines are host-local because they contain absolute paths, activity-link types, Registry hashes,
+and local repository identities. Preserve the Windows baseline as history and create a fresh Linux
+baseline only after Ubuntu fixtures, Registry generation, reports, and a complete backup pass.
 
 ## Working-set boundary
 

@@ -1,8 +1,8 @@
 <#
-PowerShell 7 entrypoint for complete Skill lifecycle operations.
+PowerShell 7 entrypoint for complete Skill lifecycle operations on Windows and Linux.
 This file only receives the trigger, loads command functions, and dispatches one explicit action;
 business decisions and filesystem mutations stay in the matching command file.
-Call example: pwsh -NoProfile -File .\skill.ps1 -Command registry -Apply
+Call example: pwsh -NoProfile -File ./skill.ps1 -Command registry -Apply
 #>
 
 [CmdletBinding()]
@@ -18,11 +18,11 @@ param(
     [string]$SkillPath,                                             # Relative selected Skill directory for HYBRID repositories.
     [string]$TargetSkill,                                           # Exact existing Skill root for targeted v2 verification.
     [string]$Ref,                                                   # Optional Git update/install branch, tag, or commit.
-    [string]$SkillHome = "D:\CodexProjects\_skills\agents\skills",
-    [string]$SourceHome = "D:\CodexProjects\_skills\sources",
-    [string]$StagingHome = "D:\CodexProjects\_skills\staging",
-    [string]$RegistryDirectory = "D:\CodexProjects\_skills\registry",
-    [string]$BackupRoot = "D:\CodexProjects\_skills\backups",
+    [string]$SkillHome,                                             # Omit to use the current host's user activity root.
+    [string]$SourceHome,                                            # Omit to use the current host's durable source root.
+    [string]$StagingHome,                                           # Omit to use the current host's transaction cache root.
+    [string]$RegistryDirectory,                                     # Omit to use the current host's state root.
+    [string]$BackupRoot,                                            # Omit to use the current host's durable backup root.
     [string]$BackupPath,                                            # Restore source directory containing backup-manifest.json.
     [string]$DestinationRoot,                                       # Empty restore destination; live roots are never implicit.
     [switch]$Apply                                                   # Enables the exact final mutation reported by preview.
@@ -31,15 +31,22 @@ param(
 $ErrorActionPreference = "Stop"                                    # Dispatch stops on the first command-level failure.
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path       # Resolve resources relative to this installed Skill.
 . (Join-Path $scriptRoot "skill-state.ps1")                         # Load shared identity, Git, path, and atomic-write rules.
-. (Join-Path $scriptRoot "commands\governance.ps1")                # Load capability taxonomy, evidence readiness, and governance report.
-. (Join-Path $scriptRoot "commands\scan.ps1")                      # Load discovery, classification, and Registry output.
-. (Join-Path $scriptRoot "commands\stability.ps1")                 # Load stable-baseline capture and read-only routine health.
-. (Join-Path $scriptRoot "commands\report.ps1")                    # Load the human-facing count and collision report.
-. (Join-Path $scriptRoot "commands\verification.ps1")              # Load optional Runtime and Behavior probes without auto-repair.
-. (Join-Path $scriptRoot "commands\install.ps1")                   # Load transactional package/source/hybrid installation.
-. (Join-Path $scriptRoot "commands\update.ps1")                    # Load fetch, candidate validation, and fast-forward update.
-. (Join-Path $scriptRoot "commands\backup.ps1")                    # Load physical-file backup and link recording.
-. (Join-Path $scriptRoot "commands\restore.ps1")                   # Load verified empty-destination restore.
+. (Join-Path $scriptRoot "commands/governance.ps1")                # Load capability taxonomy, evidence readiness, and governance report.
+. (Join-Path $scriptRoot "commands/scan.ps1")                      # Load discovery, classification, and Registry output.
+. (Join-Path $scriptRoot "commands/stability.ps1")                 # Load stable-baseline capture and read-only routine health.
+. (Join-Path $scriptRoot "commands/report.ps1")                    # Load the human-facing count and collision report.
+. (Join-Path $scriptRoot "commands/verification.ps1")              # Load optional Runtime and Behavior probes without auto-repair.
+. (Join-Path $scriptRoot "commands/install.ps1")                   # Load transactional package/source/hybrid installation.
+. (Join-Path $scriptRoot "commands/update.ps1")                    # Load fetch, candidate validation, and fast-forward update.
+. (Join-Path $scriptRoot "commands/backup.ps1")                    # Load physical-file backup and link recording.
+. (Join-Path $scriptRoot "commands/restore.ps1")                   # Load verified empty-destination restore.
+
+$hostLayout = Get-SkillHostLayout                                  # Resolve operating-system facts once for every dispatched command.
+if (-not $SkillHome) { $SkillHome = $hostLayout.skillHome }        # Explicit CLI values always override host defaults.
+if (-not $SourceHome) { $SourceHome = $hostLayout.sourceHome }
+if (-not $StagingHome) { $StagingHome = $hostLayout.stagingHome }
+if (-not $RegistryDirectory) { $RegistryDirectory = $hostLayout.registryDirectory }
+if (-not $BackupRoot) { $BackupRoot = $hostLayout.backupRoot }
 
 
 # --- Dispatch one requested lifecycle action ---
@@ -50,6 +57,8 @@ try {
                 status = "PASS"                                    # Help is a read-only successful command.
                 commands = @("scan", "registry", "report", "governance", "stabilize", "health", "verify", "install", "update", "backup", "restore")
                 applyRule = "Preview by default; add -Apply for final writes."
+                platform = $hostLayout.platform                    # Calling agents can see which default layout was selected.
+                activityLinkType = $hostLayout.activityLinkType
                 registry = $RegistryDirectory
             }
         }
@@ -89,16 +98,7 @@ try {
             Update-SkillAsset -Name $Name -Ref $Ref -RegistryDirectory $RegistryDirectory -StagingHome $StagingHome -Apply:$Apply
         }
         "backup" {
-            $backupPaths = if ($Path -and $Path.Count) { $Path } else { # Default AI capability surfaces match the established D-drive layout.
-                @(
-                    "D:\CodexProjects\_skills\agents\skills",
-                    "D:\CodexProjects\_skills\codex\skills",
-                    "D:\CodexProjects\_skills\sources",
-                    "D:\CodexProjects\_skills\registry",
-                    "C:\Users\Lenovo\.codex\global_rules",
-                    "C:\Users\Lenovo\.codex\memories"
-                )
-            }
+            $backupPaths = if ($Path -and $Path.Count) { $Path } else { Get-DefaultCapabilityBackupRoots -Layout $hostLayout } # Default scope follows the current host without scanning its full home.
             Backup-AICapabilities -Paths $backupPaths -BackupRoot $BackupRoot -Apply:$Apply
         }
         "restore" {

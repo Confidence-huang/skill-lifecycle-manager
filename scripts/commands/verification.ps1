@@ -21,7 +21,7 @@ function Get-SkillManifestValue {
 function Read-SkillVerificationManifest {
     param([Parameter(Mandatory)][string]$SkillRoot)                 # The Skill root owns both its manifest and declared tests.
 
-    $root = Get-CanonicalPath -Path $SkillRoot                     # Resolve junctions before validating relative test paths.
+    $root = Get-CanonicalPath -Path $SkillRoot                     # Resolve activity links before validating relative test paths.
     $skillFile = Join-Path $root "SKILL.md"
     if (-not (Test-Path -LiteralPath $skillFile -PathType Leaf)) { throw "BLOCKED: Skill root has no SKILL.md: $root" }
     $metadata = Read-SkillMetadata -SkillFile $skillFile
@@ -232,7 +232,7 @@ function Invoke-SkillVerification {
     $requiredStatuses = @($required | ForEach-Object { [string]$health[$_].status })
     $overallStatus = if ($requiredStatuses -contains "BLOCKED") { "BLOCKED" } elseif ($requiredStatuses -contains "UNKNOWN") { "UNKNOWN" } else { "PASS" }
     $action = if ($Execute) { "VERIFIED" } else { "PREVIEW" }
-    $reportPath = if ($Execute) { Join-Path $RegistryDirectory ("health-reports\$($read.Metadata.Name)\$((Get-Date).ToString('yyyyMMddTHHmmssfff')).json") } else { $null }
+    $reportPath = if ($Execute) { Join-Path (Join-Path $RegistryDirectory "health-reports/$($read.Metadata.Name)") "$((Get-Date).ToString('yyyyMMddTHHmmssfff')).json" } else { $null }
     $report = [pscustomobject]@{
         schemaVersion = 1; status = $overallStatus; action = $action; name = $read.Metadata.Name; skillRoot = $read.Root
         verifiedAt = if ($Execute) { (Get-Date).ToString("o") } else { $null }; installPhase = [bool]$InstallPhase

@@ -10,15 +10,15 @@ param([string]$TestParent = ([IO.Path]::GetTempPath()))              # Callers m
 $ErrorActionPreference = "Stop"                                    # One failed assertion stops the suite with a non-zero exit.
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $scriptRoot "skill-state.ps1")                         # Test the same shared functions loaded by the CLI.
-. (Join-Path $scriptRoot "commands\governance.ps1")
-. (Join-Path $scriptRoot "commands\scan.ps1")
-. (Join-Path $scriptRoot "commands\stability.ps1")
-. (Join-Path $scriptRoot "commands\report.ps1")
-. (Join-Path $scriptRoot "commands\verification.ps1")
-. (Join-Path $scriptRoot "commands\install.ps1")
-. (Join-Path $scriptRoot "commands\update.ps1")
-. (Join-Path $scriptRoot "commands\backup.ps1")
-. (Join-Path $scriptRoot "commands\restore.ps1")
+. (Join-Path $scriptRoot "commands/governance.ps1")
+. (Join-Path $scriptRoot "commands/scan.ps1")
+. (Join-Path $scriptRoot "commands/stability.ps1")
+. (Join-Path $scriptRoot "commands/report.ps1")
+. (Join-Path $scriptRoot "commands/verification.ps1")
+. (Join-Path $scriptRoot "commands/install.ps1")
+. (Join-Path $scriptRoot "commands/update.ps1")
+. (Join-Path $scriptRoot "commands/backup.ps1")
+. (Join-Path $scriptRoot "commands/restore.ps1")
 
 
 # --- Assert one test condition ---
@@ -87,6 +87,15 @@ $suiteResult = $null                                                # Emit PASS 
 $testRoot = Join-Path ([IO.Path]::GetFullPath($TestParent)) ("skill-lifecycle-manager-tests-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
 try {
+    $hostLayout = Get-SkillHostLayout                               # Fixtures verify the same defaults selected by the CLI entrypoint.
+    Assert-Test (@($hostLayout.skillHome, $hostLayout.sourceHome, $hostLayout.stagingHome, $hostLayout.registryDirectory, $hostLayout.backupRoot | Where-Object { -not $_ }).Count -eq 0) "Host layout contains an empty lifecycle root."
+    $caseFolded = Test-SameSkillPath -Left (Join-Path $testRoot "CasePath") -Right (Join-Path $testRoot "casepath")
+    Assert-Test ($caseFolded -eq $IsWindows) "Path equality does not follow the current host's case rule."
+    Assert-Test (Test-SkillPathWithinRoot -Path (Join-Path $testRoot "owner/child") -Root (Join-Path $testRoot "owner")) "A valid transaction child failed containment."
+    $siblingWasBlocked = $false
+    try { Assert-PathWithinRoot -Path (Join-Path $testRoot "owner-other/child") -Root (Join-Path $testRoot "owner") } catch { $siblingWasBlocked = $_.Exception.Message -match "outside approved root" }
+    Assert-Test $siblingWasBlocked "A lookalike sibling path bypassed containment."
+
     $scanRoot = Join-Path $testRoot "scan-root"
     $packageRoot = Join-Path $scanRoot "package-one"
     New-TestSkill -Root $packageRoot -Name "package-one" -Description "Create presentation slides and PowerPoint documents for governance fixtures." # No Git owner should classify as PACKAGE.
@@ -99,8 +108,8 @@ try {
     Save-TestRepository -Repository $sourceRoot
 
     $hybridRoot = Join-Path $scanRoot "hybrid-repository"
-    New-TestSkill -Root (Join-Path $hybridRoot "skills\hybrid-a") -Name "hybrid-a"
-    New-TestSkill -Root (Join-Path $hybridRoot "skills\hybrid-b") -Name "hybrid-b"
+    New-TestSkill -Root (Join-Path $hybridRoot "skills/hybrid-a") -Name "hybrid-a"
+    New-TestSkill -Root (Join-Path $hybridRoot "skills/hybrid-b") -Name "hybrid-b"
     & git -C $hybridRoot init -b main | Out-Null
     & git -C $hybridRoot config user.name "Skill Lifecycle Test"
     & git -C $hybridRoot config user.email "skill-lifecycle-test@example.invalid"
@@ -138,7 +147,7 @@ try {
     $governanceText = Get-Content -Raw -LiteralPath $governanceResult.reportPath
     Assert-Test ($governanceText -match "All Skills remain ``UNRATED``" -and $governanceText -match "documents-presentations") "Governance report omitted the no-fabricated-grade boundary or capability graph."
 
-    $installSource = Join-Path $testRoot "incoming\installed-package"
+    $installSource = Join-Path $testRoot "incoming/installed-package"
     New-TestSkill -Root $installSource -Name "installed-package"
     $skillHome = Join-Path $testRoot "active"
     $sourceHome = Join-Path $testRoot "sources"
@@ -150,7 +159,7 @@ try {
     Assert-Test ($installResult.action -eq "INSTALLED") "Package apply did not complete."
     Assert-Test ($installResult.verification.health.static.status -eq "PASS" -and $installResult.verification.health.runtime.status -eq "NOT_CONFIGURED") "Legacy installation did not retain Static Health compatibility."
 
-    $verifiedSource = Join-Path $testRoot "incoming\verified-package"
+    $verifiedSource = Join-Path $testRoot "incoming/verified-package"
     New-TestSkill -Root $verifiedSource -Name "verified-package"
     Add-TestVerificationManifest -Root $verifiedSource -Name "verified-package"
     $verificationPreview = Invoke-SkillVerification -SkillRoot $verifiedSource -RegistryDirectory $registryRoot
@@ -162,7 +171,7 @@ try {
     $verifiedInstall = Install-SkillAsset -Source $verifiedSource -Mode Package -SkillHome $skillHome -SourceHome $sourceHome -StagingHome $stagingHome -RegistryDirectory $registryRoot -Apply
     Assert-Test ($verifiedInstall.action -eq "INSTALLED" -and $verifiedInstall.verification.health.behavior.status -eq "PASS") "Installation did not run declared verification layers before publication."
 
-    $blockedSource = Join-Path $testRoot "incoming\blocked-package"
+    $blockedSource = Join-Path $testRoot "incoming/blocked-package"
     New-TestSkill -Root $blockedSource -Name "blocked-package"
     Add-TestVerificationManifest -Root $blockedSource -Name "blocked-package" -RuntimeExitCode 7
     $registryHashBeforeBlockedInstall = (Get-FileHash -LiteralPath (Join-Path $registryRoot "skills-registry.json") -Algorithm SHA256).Hash
@@ -171,9 +180,9 @@ try {
     catch { $blockedInstallMessage = $_.Exception.Message }
     Assert-Test ($blockedInstallMessage -match "Install verification failed" -and -not (Test-Path -LiteralPath (Join-Path $skillHome "blocked-package"))) "Failed verification did not roll back the transaction-owned activity path."
     Assert-Test ((Get-FileHash -LiteralPath (Join-Path $registryRoot "skills-registry.json") -Algorithm SHA256).Hash -eq $registryHashBeforeBlockedInstall) "Failed installation published a changed Registry."
-    Assert-Test (@(Get-ChildItem -LiteralPath (Join-Path $registryRoot "health-reports\blocked-package") -Filter "*.json" -File).Count -eq 1) "Failed installation did not retain its diagnostic evidence."
+    Assert-Test (@(Get-ChildItem -LiteralPath (Join-Path $registryRoot "health-reports/blocked-package") -Filter "*.json" -File).Count -eq 1) "Failed installation did not retain its diagnostic evidence."
 
-    $behaviorFailureRoot = Join-Path $testRoot "incoming\behavior-failure"
+    $behaviorFailureRoot = Join-Path $testRoot "incoming/behavior-failure"
     New-TestSkill -Root $behaviorFailureRoot -Name "behavior-failure"
     Add-TestVerificationManifest -Root $behaviorFailureRoot -Name "behavior-failure" -BehaviorExitCode 9 -RunOnInstall $false
     $behaviorSkillHash = (Get-FileHash -LiteralPath (Join-Path $behaviorFailureRoot "SKILL.md") -Algorithm SHA256).Hash
@@ -181,7 +190,7 @@ try {
     Assert-Test ($behaviorFailure.status -eq "BLOCKED" -and $behaviorFailure.health.runtime.status -eq "PASS" -and $behaviorFailure.health.behavior.status -eq "BLOCKED") "Behavior failure was not separated from Runtime Health."
     Assert-Test ((Get-FileHash -LiteralPath (Join-Path $behaviorFailureRoot "SKILL.md") -Algorithm SHA256).Hash -eq $behaviorSkillHash) "Verifier changed a failing Skill instead of reporting it."
 
-    $unknownRoot = Join-Path $testRoot "incoming\unknown-environment"
+    $unknownRoot = Join-Path $testRoot "incoming/unknown-environment"
     New-TestSkill -Root $unknownRoot -Name "unknown-environment"
     Add-TestVerificationManifest -Root $unknownRoot -Name "unknown-environment" -RunOnInstall $false
     $unknownManifestPath = Join-Path $unknownRoot "skill.manifest.yaml"
@@ -191,13 +200,13 @@ try {
     $unknownVerification = Invoke-SkillVerification -SkillRoot $unknownRoot -RegistryDirectory $registryRoot -Execute
     Assert-Test ($unknownVerification.status -eq "UNKNOWN" -and $unknownVerification.health.runtime.status -eq "UNKNOWN") "Missing environment evidence was not preserved as UNKNOWN."
 
-    $invalidManifestRoot = Join-Path $testRoot "incoming\invalid-manifest"
+    $invalidManifestRoot = Join-Path $testRoot "incoming/invalid-manifest"
     New-TestSkill -Root $invalidManifestRoot -Name "invalid-manifest"
     [IO.File]::WriteAllText((Join-Path $invalidManifestRoot "skill.manifest.yaml"), "{ invalid JSON-compatible YAML", [Text.UTF8Encoding]::new($false))
     $invalidManifest = Invoke-SkillVerification -SkillRoot $invalidManifestRoot -RegistryDirectory $registryRoot
     Assert-Test ($invalidManifest.status -eq "BLOCKED" -and $invalidManifest.health.static.status -eq "BLOCKED") "Invalid manifest did not fail Static Health during preview."
 
-    $gitPackageRoot = Join-Path $testRoot "incoming\git-package-one"
+    $gitPackageRoot = Join-Path $testRoot "incoming/git-package-one"
     New-TestSkill -Root $gitPackageRoot -Name "git-package-one"
     & git -C $gitPackageRoot init -b main | Out-Null
     & git -C $gitPackageRoot config user.name "Skill Lifecycle Test"
@@ -205,16 +214,16 @@ try {
     Save-TestRepository -Repository $gitPackageRoot
     $gitPackageCommit = ((& git -C $gitPackageRoot rev-parse HEAD) -join "").Trim()
     $gitPackageInstall = Install-SkillAsset -Source $gitPackageRoot -Mode Package -SkillHome $skillHome -SourceHome $sourceHome -StagingHome $stagingHome -RegistryDirectory $registryRoot -Apply
-    $gitPackageOrigin = Get-Content -Raw -LiteralPath (Join-Path $skillHome "git-package-one\.skill-lifecycle.json") | ConvertFrom-Json
+    $gitPackageOrigin = Get-Content -Raw -LiteralPath (Join-Path $skillHome "git-package-one/.skill-lifecycle.json") | ConvertFrom-Json
     Assert-Test ($gitPackageInstall.action -eq "INSTALLED" -and $gitPackageOrigin.commit -eq $gitPackageCommit) "Git-backed package did not preserve its full source commit."
     $packageRegistry = Get-Content -Raw -LiteralPath (Join-Path $registryRoot "skills-registry.json") | ConvertFrom-Json
     $gitPackageRegistryRecord = @($packageRegistry.skills | Where-Object name -eq "git-package-one")
     Assert-Test (@($gitPackageRegistryRecord | Where-Object { $_.lifecycleMode -eq "PACKAGE" -and $_.commit -eq $gitPackageCommit }).Count -eq 1) "Registry did not expose Git-backed PACKAGE provenance: $($gitPackageRegistryRecord | ConvertTo-Json -Compress -Depth 5)"
 
     $sourceInstall = Install-SkillAsset -Source $sourceRoot -Mode Source -SkillHome $skillHome -SourceHome $sourceHome -StagingHome $stagingHome -RegistryDirectory $registryRoot -Apply
-    Assert-Test ($sourceInstall.action -eq "INSTALLED" -and (Get-Item -Force -LiteralPath (Join-Path $skillHome "source-one")).LinkType -eq "Junction") "Source install did not create one source clone and activity junction."
-    $hybridInstall = Install-SkillAsset -Source $hybridRoot -Mode Hybrid -SkillPath "skills\hybrid-a" -SkillHome $skillHome -SourceHome $sourceHome -StagingHome $stagingHome -RegistryDirectory $registryRoot -Apply
-    Assert-Test ($hybridInstall.action -eq "INSTALLED" -and (Get-Item -Force -LiteralPath (Join-Path $skillHome "hybrid-a")).LinkType -eq "Junction") "Hybrid install did not activate the selected repository entry."
+    Assert-Test ($sourceInstall.action -eq "INSTALLED" -and (Get-Item -Force -LiteralPath (Join-Path $skillHome "source-one")).LinkType -eq $hostLayout.activityLinkType) "Source install did not create the expected activity link."
+    $hybridInstall = Install-SkillAsset -Source $hybridRoot -Mode Hybrid -SkillPath "skills/hybrid-a" -SkillHome $skillHome -SourceHome $sourceHome -StagingHome $stagingHome -RegistryDirectory $registryRoot -Apply
+    Assert-Test ($hybridInstall.action -eq "INSTALLED" -and (Get-Item -Force -LiteralPath (Join-Path $skillHome "hybrid-a")).LinkType -eq $hostLayout.activityLinkType) "Hybrid install did not create the expected activity link."
 
     $origin = Join-Path $testRoot "update-origin.git"
     & git init --bare $origin | Out-Null                              # Local bare remote makes update tests deterministic and offline.
@@ -232,7 +241,7 @@ try {
     & git clone $origin $managed | Out-Null
     $updateHome = Join-Path $testRoot "update-active"
     New-Item -ItemType Directory -Path $updateHome -Force | Out-Null
-    New-Item -ItemType Junction -Path (Join-Path $updateHome "update-one") -Target $managed | Out-Null
+    New-SkillActivityLink -Path (Join-Path $updateHome "update-one") -Target $managed | Out-Null
     $null = Invoke-SkillScan -Paths @($updateHome) -RegistryDirectory $registryRoot -WriteRegistry
 
     Add-Content -LiteralPath (Join-Path $seed "SKILL.md") -Value "`nUpdate fixture content." -Encoding utf8
@@ -251,7 +260,7 @@ try {
     & git -C $blockedManaged config user.email "skill-lifecycle-test@example.invalid"
     Save-TestRepository -Repository $blockedManaged
     Add-Content -LiteralPath (Join-Path $blockedManaged "SKILL.md") -Value "`nDirty fixture content." -Encoding utf8 # Dirty worktree must block only this repository in all mode.
-    New-Item -ItemType Junction -Path (Join-Path $updateHome "update-blocked") -Target $blockedManaged | Out-Null
+    New-SkillActivityLink -Path (Join-Path $updateHome "update-blocked") -Target $blockedManaged | Out-Null
     $null = Invoke-SkillScan -Paths @($updateHome) -RegistryDirectory $registryRoot -WriteRegistry
     $allUpdateResults = @(Update-SkillAsset -Name "all" -RegistryDirectory $registryRoot -StagingHome $stagingHome -Apply)
     Assert-Test (@($allUpdateResults | Where-Object { $_.name -eq "update-one" -and $_.action -eq "CURRENT" }).Count -eq 1) "Batch update did not continue to the clean repository."
@@ -261,11 +270,11 @@ try {
     $backupRoot = Join-Path $testRoot "backups"
     $backupResult = Backup-AICapabilities -Paths @($skillHome, $registryRoot, $updateHome) -BackupRoot $backupRoot -Apply
     Assert-Test ($backupResult.action -eq "BACKED_UP") "Backup did not complete."
-    Assert-Test ($backupResult.linkCount -eq 4) "Backup did not record all four activity junctions exactly once."
+    Assert-Test ($backupResult.linkCount -eq 4) "Backup did not record all four activity links exactly once."
     $backupManifest = Get-Content -Raw -LiteralPath $backupResult.manifest | ConvertFrom-Json
-    $updateActivityRoot = Get-CanonicalPath -Path $updateHome       # This fixture root contains only a junction to the managed repository.
-    $filesCopiedThroughJunction = @($backupManifest.files | Where-Object sourceRoot -eq $updateActivityRoot)
-    Assert-Test ($filesCopiedThroughJunction.Count -eq 0) "Backup entered an activity junction instead of recording only the link."
+    $updateActivityRoot = Get-CanonicalPath -Path $updateHome       # This fixture root contains only links to managed repositories.
+    $filesCopiedThroughLink = @($backupManifest.files | Where-Object sourceRoot -eq $updateActivityRoot)
+    Assert-Test ($filesCopiedThroughLink.Count -eq 0) "Backup entered an activity link instead of recording only the link."
     $restoreRoot = Join-Path $testRoot "restored"
     $restorePreview = Restore-AICapabilities -BackupPath $backupResult.destination -DestinationRoot $restoreRoot
     Assert-Test ($restorePreview.action -eq "PREVIEW") "Restore preview did not validate the backup."
@@ -273,7 +282,7 @@ try {
     Assert-Test ($restoreResult.action -eq "RESTORED") "Restore apply did not complete."
 
     $managerRoot = Join-Path $sourceHome "source-one"              # Clean source fixture stands in for the manager repository.
-    $managerActivity = Join-Path $skillHome "source-one"           # Existing junction proves single-source activation.
+    $managerActivity = Join-Path $skillHome "source-one"           # Existing host link proves single-source activation.
     $stabilityPreview = Save-SkillStabilityBaseline -RegistryDirectory $registryRoot -BackupRoot $backupRoot -ManagerRoot $managerRoot -ActivityPath $managerActivity
     Assert-Test ($stabilityPreview.action -eq "PREVIEW" -and -not (Test-Path -LiteralPath (Join-Path $registryRoot "skill-stability-baseline.json"))) "Stability preview unexpectedly wrote the baseline."
     $stabilityResult = Save-SkillStabilityBaseline -RegistryDirectory $registryRoot -BackupRoot $backupRoot -ManagerRoot $managerRoot -ActivityPath $managerActivity -Apply
@@ -298,7 +307,7 @@ try {
 
     $suiteResult = [pscustomobject]@{
         status = "PASS"                                            # Existing v1 and additive v2 capabilities completed against isolated fixtures.
-        tests = 58
+        tests = 62
         classifications = $registry.summary.lifecycleMode
         updatedFrom = $beforeUpdate
         updatedTo = $afterUpdate

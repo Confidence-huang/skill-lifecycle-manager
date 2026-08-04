@@ -1,6 +1,6 @@
 <#
 Stable-operation commands for the installed Skill capability system.
-`stabilize` records one immutable local baseline after the manager, Registry, activity junction,
+`stabilize` records one immutable local baseline after the manager, Registry, activity link,
 generated reports, managed repositories, and latest complete backup are observed. `health` compares
 the live machine against that baseline without fetching, rewriting the Registry, or changing Skills.
 Call example: Save-SkillStabilityBaseline -RegistryDirectory "D:\registry" -BackupRoot "D:\backups" -ManagerRoot "D:\manager" -ActivityPath "D:\active\manager" -Apply
@@ -41,14 +41,14 @@ function Get-SkillInventoryFingerprint {
 
 # --- Describe one activity entry and its exact target ---
 function Get-SkillActivityFacts {
-    param([Parameter(Mandatory)][string]$ActivityPath)               # The manager should be exposed through one junction.
+    param([Parameter(Mandatory)][string]$ActivityPath)               # The manager should be exposed through the current host's supported link.
 
     if (-not (Test-Path -LiteralPath $ActivityPath)) {
         return [pscustomobject]@{ exists = $false; path = [IO.Path]::GetFullPath($ActivityPath); linkType = $null; target = $null }
     }
 
     $item = Get-Item -Force -LiteralPath $ActivityPath              # `-Force` retains reparse-point metadata.
-    $target = if ($item.LinkType) { [string]::Join(";", @($item.Target)) } else { $null }
+    $target = if ($item.LinkType) { Get-SkillLinkTargetPath -Item $item } else { $null }
     return [pscustomobject]@{
         exists = $true                                              # Entry exists independently from whether it targets the right source.
         path = [IO.Path]::GetFullPath($item.FullName)               # Normalized path is stable in the baseline.
@@ -107,7 +107,7 @@ function Get-LatestCapabilityBackup {
             manifestSHA256 = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash
             createdAt = ([datetimeoffset]$manifest.createdAt).ToString("o") # Preserve an unambiguous offset instead of locale-formatted text.
             fileCount = @($manifest.files).Count                   # Counts make the health summary useful without rehashing 5.5 GB.
-            linkCount = @($manifest.links).Count                    # Junction records remain separate from physical files.
+            linkCount = @($manifest.links).Count                    # Filesystem-link records remain separate from physical files.
         })
     }
     $latest = @($candidates | Sort-Object { [datetimeoffset]$_.createdAt } -Descending | Select-Object -First 1)
@@ -136,7 +136,7 @@ function Get-ProjectSkillProfileFacts {
 
     try { $profile = Get-Content -Raw -LiteralPath $profilePath | ConvertFrom-Json } catch { $issues.Add("Profile JSON is invalid: $($_.Exception.Message)"); return [pscustomobject]@{ status = "BLOCKED"; projectRoot = $project; profilePath = $profilePath; declaredSkills = 0; missingSkills = @(); issues = @($issues) } }
     if ($profile.schemaVersion -ne 1) { $issues.Add("Unsupported project profile schema '$($profile.schemaVersion)'.") }
-    if ([IO.Path]::GetFullPath([string]$profile.inherits.globalBaseline) -ne [IO.Path]::GetFullPath($BaselinePath)) { $issues.Add("Project profile points to a different global baseline.") }
+    if (-not (Test-SameSkillPath -Left ([string]$profile.inherits.globalBaseline) -Right $BaselinePath)) { $issues.Add("Project profile points to a different global baseline.") }
 
     $declared = [Collections.Generic.List[string]]::new()           # Tier names express roles, never quality or usage grades.
     foreach ($tier in $profile.workingSet.PSObject.Properties) {
@@ -162,7 +162,7 @@ function Save-SkillStabilityBaseline {
         [Parameter(Mandatory)][string]$RegistryDirectory,           # Baseline lives beside, but does not replace, the canonical Registry.
         [Parameter(Mandatory)][string]$BackupRoot,                  # A complete recovery point is mandatory before freezing.
         [Parameter(Mandatory)][string]$ManagerRoot,                 # Clean manager Git commit becomes the implementation identity.
-        [Parameter(Mandatory)][string]$ActivityPath,                # Active junction must resolve to that exact manager repository.
+        [Parameter(Mandatory)][string]$ActivityPath,                # Active link must resolve to that exact manager repository.
         [switch]$Apply                                              # Preview reports evidence; Apply writes one immutable baseline file.
     )
 
@@ -181,9 +181,10 @@ function Save-SkillStabilityBaseline {
     $managerGit = Get-GitFacts -Path $manager
     if (-not $managerGit.IsRepository -or -not $managerGit.Commit -or -not $managerGit.IsClean) { throw "BLOCKED: Manager source must be a clean Git repository with a committed HEAD." }
     $activity = Get-SkillActivityFacts -ActivityPath $ActivityPath
-    if (-not $activity.exists -or $activity.linkType -ne "Junction") { throw "BLOCKED: Manager activity entry must be a junction." }
+    $expectedLinkType = (Get-SkillHostLayout).activityLinkType      # Stability records only the link mechanism supported by this host.
+    if (-not $activity.exists -or $activity.linkType -ne $expectedLinkType) { throw "BLOCKED: Manager activity entry must be a $expectedLinkType." }
     $activityTarget = Get-CanonicalPath -Path $activity.target
-    if ($activityTarget -ne $manager) { throw "BLOCKED: Manager activity junction targets '$activityTarget', not '$manager'." }
+    if (-not (Test-SameSkillPath -Left $activityTarget -Right $manager)) { throw "BLOCKED: Manager activity link targets '$activityTarget', not '$manager'." }
     $backup = Get-LatestCapabilityBackup -BackupRoot $BackupRoot
     if (-not $backup) { throw "BLOCKED: No complete version-1 AI capability backup is available." }
 
@@ -270,7 +271,7 @@ function Get-SkillHealth {
     $checks.Add([pscustomobject]@{ name = "manager-git"; status = if ($managerMatches) { "PASS" } else { "BLOCKED" }; detail = "HEAD=$($manager.Commit); clean=$($manager.IsClean)" })
     $activity = Get-SkillActivityFacts -ActivityPath $ActivityPath
     $activityTarget = if ($activity.target) { Get-CanonicalPath -Path $activity.target } else { $null }
-    $activityMatches = $activity.exists -and $activity.linkType -eq $baseline.manager.activityLinkType -and $activityTarget -eq $baseline.manager.activityTarget
+    $activityMatches = $activity.exists -and $activity.linkType -eq $baseline.manager.activityLinkType -and $activity.linkType -eq (Get-SkillHostLayout).activityLinkType -and $activityTarget -and (Test-SameSkillPath -Left $activityTarget -Right ([string]$baseline.manager.activityTarget))
     $checks.Add([pscustomobject]@{ name = "manager-activity"; status = if ($activityMatches) { "PASS" } else { "BLOCKED" }; detail = "$($activity.linkType) -> $activityTarget" })
 
     foreach ($report in @($baseline.reports.capability, $baseline.reports.governance)) {
@@ -282,7 +283,7 @@ function Get-SkillHealth {
     $liveRepositories = @(Get-ManagedRepositorySnapshots -Registry $registry)
     $repositoryDrift = [Collections.Generic.List[string]]::new()
     foreach ($frozen in $baselineRepositories) {
-        $live = @($liveRepositories | Where-Object root -eq $frozen.root)
+        $live = @($liveRepositories | Where-Object { Test-SameSkillPath -Left ([string]$_.root) -Right ([string]$frozen.root) })
         if ($live.Count -ne 1 -or $live[0].commit -ne $frozen.commit -or $live[0].localStateFingerprint -ne $frozen.localStateFingerprint) { $repositoryDrift.Add([string]$frozen.root) }
     }
     $sourceMatches = $repositoryDrift.Count -eq 0 -and $liveRepositories.Count -eq $baselineRepositories.Count
