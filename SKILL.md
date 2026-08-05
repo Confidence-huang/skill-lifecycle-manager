@@ -1,211 +1,123 @@
 ---
 name: skill-lifecycle-manager
-description: Manage and govern the complete lifecycle of Codex and cross-agent Skills on Windows and Linux with PowerShell 7. Use when Codex needs to inventory or classify Skills, generate the canonical Skill Registry, run layered Static, Runtime, and Behavior Health verification, build an evidence-backed capability graph, freeze a verified stable-use baseline, validate a project's declared Skill working set, install or update a managed Skill, create a capability backup, or restore into an empty destination. Distinguishes asset scope, lifecycle mode, observed governance state, and unknown assessment evidence without inventing quality or usage scores.
+description: Manage and govern the complete lifecycle of Codex and cross-agent Skills on Linux with a Python 3.12 and uv native CLI. Use to inventory or classify Skills, generate the canonical Registry, report evidence-backed governance, run explicit Static Runtime and Behavior verification, install or update one managed Skill transactionally, create or restore a link-aware capability backup, freeze a host-local stable baseline, or run zero-write health checks without PowerShell or Windows junction dependencies.
 ---
 
 # Skill Lifecycle Manager
 
-Manage Skill assets as a small software supply chain instead of treating every `SKILL.md` as a copied folder. Keep physical inventory counts separate from top-level Agent entries and Codex Desktop display rows.
+Manage Linux Skill assets as a small software supply chain. Keep physical inventory, Agent activity
+entries, Registry evidence, runtime behavior, and human governance decisions separate.
 
-Keep two classifications separate:
-
-- Asset scope answers who owns activation: `SYSTEM`, `USER`, `PROJECT`, or `UNKNOWN`.
-- Lifecycle mode answers how the asset is acquired and maintained: `PACKAGE`, `SOURCE`, `HYBRID`, or `UNKNOWN`.
+The normal Ubuntu entrypoint is the Python 3.12 `skill` command installed from this repository with
+`uv`. PowerShell scripts remain tracked only as a migration fallback and are not a runtime dependency.
 
 ## Operating rules
 
-1. Load the governing workspace and project rules before changing global Skill state.
-2. Run commands with PowerShell 7 through `pwsh -NoProfile`.
-3. Use `scan` or `registry` before install/update work so decisions start from live evidence.
-4. Treat output labels literally: `PASS` is verified, `BLOCKED` prevents the requested mutation, and `UNKNOWN` needs more evidence.
-5. Use the default preview first when the target or effect is not already explicit. Add `-Apply` to perform the exact reported mutation.
-6. Never replace an existing active entry. Resolve or remove the collision as a separate, explicitly scoped task.
-7. Preserve one physical active entity. Use the host-supported activity link for SOURCE/HYBRID (`Junction` on Windows, `SymbolicLink` on Linux) and a physical directory for PACKAGE activation.
-8. Pin Git-backed installations to the resolved full commit SHA. A branch is only an update channel.
-9. Update with `fetch -> compare -> detached candidate validation -> fast-forward`, never with an unchecked `git pull`.
-10. Keep backup and restore targets explicit. Restore only into an empty destination.
-11. Treat `verify` as evidence collection: never auto-repair a failing Skill, dependency, or environment.
-12. After Phase 2 is verified, prefer stable-use observation over immediate Registry redesign or automatic routing.
+1. Load workspace and project rules before changing global Skill state.
+2. Use Python 3.12 through the committed uv project and lock file.
+3. Run `skill scan` or a preview before every lifecycle mutation.
+4. Treat `PASS`, `BLOCKED`, `UNKNOWN`, `NOT_CONFIGURED`, and `NOT_RUN` literally.
+5. Mutating commands preview by default and require `--apply`.
+6. Never replace an existing source or activity entry. Resolve collisions separately.
+7. Preserve one physical entity and expose SOURCE/HYBRID assets through Linux symbolic links.
+8. Pin Git-backed state to a full commit SHA. A branch is only an update channel.
+9. Update through remote inspection, fetch, ancestry proof, detached validation, and fast-forward.
+10. Verify never repairs dependencies, edits a failing Skill, changes PATH, or retries credentials.
+11. Backup records symbolic links without following them; restore requires an empty destination.
+12. Health is always read-only and never fetches, installs, updates, deletes, grades, or routes.
 
 ## Command entry
 
-Use [scripts/skill.ps1](scripts/skill.ps1) as the single entrypoint:
+From the source repository:
 
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command help
+```bash
+uv sync --frozen
+uv run skill --help
 ```
 
-The command reports JSON so both a human and another agent can inspect exact paths, modes, commits, and stop reasons.
+After the reviewed checkout passes acceptance, publish the user-level command:
 
-## Scan and build the Registry
-
-Preview the live inventory:
-
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command scan
+```bash
+./bootstrap.sh
+skill --help
 ```
 
-Generate the canonical JSON Registry plus a readable YAML mirror:
+## Inventory, Registry, and reports
 
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command registry -Apply
+```bash
+skill scan
+skill registry
+skill registry --apply
+skill report --apply
+skill governance --apply
 ```
 
-Default Registry location is host-local:
+The canonical host-local files are under
+`$XDG_STATE_HOME/skill-lifecycle-manager` with fallback
+`~/.local/state/skill-lifecycle-manager`. JSON is authoritative; YAML and Markdown are generated
+views. Read [references/registry-schema.md](references/registry-schema.md) and
+[references/governance.md](references/governance.md) before consuming their fields.
 
-```text
-Windows: D:\CodexProjects\_skills\registry\skills-registry.json
-Linux:   $XDG_STATE_HOME/skill-lifecycle-manager/skills-registry.json
-         (fallback: ~/.local/state/skill-lifecycle-manager/skills-registry.json)
+## Verification
+
+```bash
+skill verify --name bilibili-video-learning
+skill verify --name bilibili-video-learning --apply
+skill verify --target-skill /exact/candidate/root --apply
 ```
 
-The JSON file is canonical. The YAML file is a generated mirror and must not be edited independently. Read [references/registry-schema.md](references/registry-schema.md) before consuming fields programmatically.
-Read [references/cross-platform-v3.md](references/cross-platform-v3.md) before moving state between hosts or claiming Linux acceptance.
+A legacy Skill without `skill.manifest.yaml` keeps Static verification while Runtime and Behavior
+report `NOT_CONFIGURED`. A manifest uses the documented JSON-compatible YAML subset and argument
+arrays. Read [references/verification-v2.md](references/verification-v2.md).
 
-Generate the human-facing count and collision report after the Registry is current:
+## Install and update
 
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command report -Apply
+```bash
+skill install /path/to/package --mode package
+skill install /path/to/package --mode package --apply
+skill install https://github.com/owner/repository.git --mode source --apply
+skill install https://github.com/owner/repository.git --mode hybrid --skill-path skills/chosen --apply
+skill update --name hop
+skill update --name hop --apply
 ```
 
-The report explains physical entries, exact names, top-level activations, nested Skills, aliases, and collisions. It does not claim that the physical count equals the Codex Desktop list size.
-
-## Govern capabilities
-
-Preview the live capability graph, evidence readiness, and observed lifecycle states:
-
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command governance
-```
-
-Refresh the canonical Registry and generate `skill-governance-report.md`:
-
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command governance -Apply
-```
-
-Governance never fabricates A/B grades. `evidenceReadinessScore` covers only metadata, activation, maintenance mode, provenance, and collision evidence. Quality, usage, and security remain `UNKNOWN` until real evaluation, telemetry, and audits exist. Read [references/governance.md](references/governance.md) before using governance fields for decisions.
-
-## Stabilize and check health
-
-Preview and freeze the current verified local baseline:
-
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command stabilize
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command stabilize -Apply
-```
-
-Run the daily or weekly read-only check:
-
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command health
-```
-
-Validate one real project's declared working set:
-
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command health -ProjectRoot "D:\CodexProjects\Project_25 学习东西"
-```
-
-The stability baseline records local commits, Registry/report hashes, activity identity, and the latest complete backup. Health performs no writes and no remote fetch, so upstream freshness remains `UNKNOWN_NOT_FETCHED`. Project tiers are role labels only; they do not change discovery or imply quality. Read [references/stability.md](references/stability.md) before freezing or interpreting health output.
-
-## Verify Runtime and Behavior Health
-
-Preview one activity entry without executing its probes:
-
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command verify -Name bilibili-video-learning
-```
-
-Run its declared probes and persist a timestamped evidence report:
-
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command verify -Name bilibili-video-learning -Apply
-```
-
-Use `-TargetSkill "<exact-skill-root>"` when verifying a candidate that is not yet in the Registry. A Skill without `skill.manifest.yaml` remains compatible: Static Health runs, while Runtime and Behavior report `NOT_CONFIGURED`. An opted-in manifest must use the documented JSON-compatible YAML subset and keep probes under `tests/`. Read [references/verification-v2.md](references/verification-v2.md) before authoring a manifest or interpreting `NOT_RUN`, `UNKNOWN`, and `BLOCKED`.
-
-## Install
-
-Install a self-contained local package:
-
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" `
-  -Command install `
-  -Source "D:\incoming\my-skill" `
-  -Mode Package `
-  -Apply
-```
-
-Install a complete Git repository as a source-managed Skill:
-
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" `
-  -Command install `
-  -Source "https://github.com/owner/repository.git" `
-  -Mode Source `
-  -Apply
-```
-
-Install one Skill from a multi-Skill repository:
-
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" `
-  -Command install `
-  -Source "https://github.com/owner/repository.git" `
-  -Mode Hybrid `
-  -SkillPath "skills/chosen-skill" `
-  -Apply
-```
-
-`Auto` mode classifies a local or cloned source from evidence. If a repository contains multiple eligible Skill entries, installation is `BLOCKED` until `-SkillPath` names the intended entry. After activation and before Registry publication, installation runs only manifest layers with `runOnInstall: true`. A failure retains its health report, rolls back transaction-created source/activity paths, leaves the prior Registry unchanged, and never attempts an automatic repair.
-
-## Update
-
-Preview one source-managed update:
-
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command update -Name hop
-```
-
-Apply validated fast-forward updates to every eligible Registry entry:
-
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command update -Name all -Apply
-```
-
-An update stops for dirty worktrees, missing remotes/upstreams, non-fast-forward history, invalid candidate Skill entries, or duplicate Registry names. See [references/operations.md](references/operations.md) for mutation and rollback boundaries.
+Install publishes Registry evidence only after activation and required install probes pass. Update
+never uses unchecked pull or history rewriting. Read [references/operations.md](references/operations.md).
 
 ## Backup and restore
 
-Create a backup from explicitly supplied roots:
-
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" `
-  -Command backup `
-  -Path "D:\CodexProjects\_skills\agents\skills","D:\CodexProjects\_skills\sources","D:\CodexProjects\_skills\registry" `
-  -Apply
+```bash
+skill backup --path ~/.agents/skills --path ~/.local/share/skill-lifecycle-manager --apply
+skill restore --backup-path /exact/backup --destination /empty/destination
+skill restore --backup-path /exact/backup --destination /empty/destination --apply
 ```
 
-Preview restore into an empty destination, then repeat with `-Apply`:
+Links are returned for explicit review and are never silently recreated on another host.
 
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" `
-  -Command restore `
-  -BackupPath "D:\CodexProjects\_skills\backups\ai-capabilities-YYYYMMDD-HHMMSS" `
-  -DestinationRoot "D:\Restored-AI-Capabilities"
+## Stable operation
+
+```bash
+skill stabilize
+skill stabilize --apply
+skill health
+skill health --project-root /home/a/CodexProjects/Project_25-AI-Courses
 ```
 
-Backups copy physical files once and record filesystem links separately. Restore recreates files and reports links for review; it does not silently recreate machine-specific targets.
+An existing baseline is immutable. A deliberate migration rebaseline must add
+`--archive-existing`, preserving the old bytes in baseline history first. Read
+[references/stability.md](references/stability.md) and
+[references/python-linux-v4.md](references/python-linux-v4.md).
 
 ## Completion checks
 
 After any implementation or environment change:
 
-1. Run `scripts/test-skill.ps1` (v2 includes layered verification and failed-install rollback fixtures).
-2. Run the bundled `quick_validate.py` against this Skill directory.
-3. Regenerate the live Registry.
-4. Confirm the activity path uses the current host's expected link type and targets the clean source repository.
-5. Confirm Codex discovery returns `skill-lifecycle-manager` exactly once.
-6. Review the exact Git diff, stage only this Skill's files, and commit the verified atomic change.
-7. After committing a stable-use change, run `stabilize -Apply` once and confirm `health` passes against the committed manager HEAD.
+1. Run `uv sync --frozen` and `uv run python -m unittest discover -s tests -v`.
+2. Run the official `quick_validate.py` against this Skill root.
+3. Build both wheel and source distribution with `uv build`.
+4. Run preview/write pairs against isolated roots and prove preview state hashes do not change.
+5. Regenerate live Registry, reports, backup, and explicit baseline.
+6. Confirm the activity path is one symbolic link to this clean source repository.
+7. Confirm the installed `skill` executable resolves to this package without `pwsh` in PATH.
+8. Confirm Codex discovers `skill-lifecycle-manager` exactly once.
+9. Review exact Git diff, stage only this repository's files, and commit the verified atomic change.

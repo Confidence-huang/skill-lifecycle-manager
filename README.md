@@ -1,0 +1,33 @@
+# Skill Lifecycle Manager
+
+Python 3.12 and uv native Skill lifecycle tooling for Ubuntu. It preserves the established Registry,
+governance, verification, transaction, recovery, and stable-health contracts while removing
+PowerShell from the normal Linux runtime.
+
+## Development
+
+```bash
+uv sync --frozen
+uv run python -m unittest discover -s tests -v
+uv run skill --help
+uv build
+```
+
+The normal command surface is:
+
+```text
+skill scan
+skill registry [--apply]
+skill report [--apply]
+skill governance [--apply]
+skill verify (--name NAME | --target-skill PATH) [--apply]
+skill install SOURCE --mode auto|package|source|hybrid [--skill-path PATH] [--apply]
+skill update --name NAME [--apply]
+skill backup --path PATH [--path PATH ...] [--apply]
+skill restore --backup-path PATH --destination PATH [--apply]
+skill stabilize [--apply] [--archive-existing]
+skill health [--project-root PATH]
+```
+
+Run `./bootstrap.sh` only after the checkout is clean and acceptance passes. It installs the reviewed
+checkout as the user-level `skill` command through `uv tool install --editable`.

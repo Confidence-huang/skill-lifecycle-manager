@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "name": "skill-lifecycle-manager",
+  "requiredLayers": ["static", "runtime", "behavior"],
+  "runtime": {
+    "command": "{skillRoot}/.venv/bin/python",
+    "arguments": ["{skillRoot}/tests/runtime.py"],
+    "timeoutSeconds": 30,
+    "runOnInstall": true,
+    "expect": {"exitCode": 0, "stdoutJsonEquals": {"status": "PASS"}}
+  },
+  "behavior": {
+    "command": "{skillRoot}/.venv/bin/python",
+    "arguments": ["{skillRoot}/tests/behavior.py"],
+    "timeoutSeconds": 60,
+    "runOnInstall": true,
+    "expect": {"exitCode": 0, "stdoutJsonEquals": {"status": "PASS"}}
+  }
+}

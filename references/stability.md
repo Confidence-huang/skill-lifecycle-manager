@@ -6,9 +6,9 @@ Stable operation begins only after inventory, governance, tests, Git, activity-l
 
 Preview first, then write one immutable baseline:
 
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command stabilize
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command stabilize -Apply
+```bash
+skill stabilize
+skill stabilize --apply
 ```
 
 The command creates `skill-stability-baseline.json` beside the canonical Registry. It records:
@@ -24,14 +24,14 @@ It does not tag Git, create a branch, copy Skills, or alter the Registry schema.
 
 ## Run routine health
 
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command health
+```bash
+skill health
 ```
 
-Add `-ProjectRoot` to validate a project's `PROJECT_LOG.md` and `project-skill-profile.json` against the same global baseline:
+Add `--project-root` to validate a project's `PROJECT_LOG.md` and `project-skill-profile.json` against the same global baseline:
 
-```powershell
-pwsh -NoProfile -File "<skill-root>/scripts/skill.ps1" -Command health -ProjectRoot "D:\CodexProjects\Project_25 学习东西"
+```bash
+skill health --project-root /home/a/CodexProjects/Project_25-AI-Courses
 ```
 
 Health is always read-only. It scans live Skill identity, compares local Git and file evidence, checks the frozen recovery manifest, and returns structured JSON. It does not fetch remotes; therefore upstream freshness is reported as `UNKNOWN_NOT_FETCHED`, never as “no updates.”
@@ -39,6 +39,10 @@ Health is always read-only. It scans live Skill identity, compares local Git and
 Baselines are host-local because they contain absolute paths, activity-link types, Registry hashes,
 and local repository identities. Preserve the Windows baseline as history and create a fresh Linux
 baseline only after Ubuntu fixtures, Registry generation, reports, and a complete backup pass.
+
+An existing Linux baseline is also immutable. A deliberate implementation migration must use
+`skill stabilize --apply --archive-existing`, which verifies and preserves the prior bytes under
+`baseline-history/` before publishing the new baseline.
 
 ## Working-set boundary
 

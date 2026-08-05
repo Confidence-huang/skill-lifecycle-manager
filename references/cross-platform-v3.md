@@ -1,5 +1,9 @@
 # Cross-platform v3 design and migration contract
 
+> Historical contract: v3 established the accepted PowerShell 7 compatibility baseline. The user
+> later selected a Linux-native Python migration; [python-linux-v4.md](python-linux-v4.md) supersedes
+> v3 for the normal Ubuntu runtime while retaining this file as rollback evidence.
+
 This document freezes the Linux-first compatibility boundary before implementation. Version 3
 keeps the existing lifecycle product and makes its host-dependent filesystem behavior explicit; it
 does not create a second manager, Registry, active tree, or Python rewrite.
