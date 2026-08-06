@@ -112,6 +112,13 @@ An existing baseline is immutable. A deliberate migration rebaseline must add
 [references/stability.md](references/stability.md) and
 [references/python-linux-v4.md](references/python-linux-v4.md).
 
+## V5 Phase A contract candidate
+
+The repository contains machine-valid V5 supply-chain Schemas and pure artifact-identity fixtures.
+They are an isolated candidate, not an active Registry migration or approval system. Do not create
+live lock, evidence, decision, or transaction state from these files until later phases pass their
+separate stop gates. Read [references/supply-chain-v5.md](references/supply-chain-v5.md).
+
 ## Completion checks
 
 After any implementation or environment change:

@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skill-lifecycle-manager.local/schemas/v5/transaction.schema.json",
+  "title": "Append-only capability mutation transaction",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "documentType",
+    "transactionID",
+    "action",
+    "skillName",
+    "approvalDecisionID",
+    "beforeArtifactID",
+    "afterArtifactID",
+    "startedAt",
+    "endedAt",
+    "executedBy",
+    "createdPaths",
+    "modifiedPaths",
+    "steps",
+    "rollbackPlan",
+    "rollbackResult",
+    "finalStatus"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "documentType": {"const": "CAPABILITY_TRANSACTION"},
+    "transactionID": {"$ref": "common.schema.json#/$defs/transactionID"},
+    "action": {"enum": ["INSTALL", "UPDATE", "ACTIVATE", "ROLLBACK", "RESTORE"]},
+    "skillName": {"$ref": "common.schema.json#/$defs/skillName"},
+    "approvalDecisionID": {"$ref": "common.schema.json#/$defs/decisionID"},
+    "beforeArtifactID": {
+      "oneOf": [
+        {"$ref": "common.schema.json#/$defs/artifactID"},
+        {"type": "null"}
+      ]
+    },
+    "afterArtifactID": {
+      "oneOf": [
+        {"$ref": "common.schema.json#/$defs/artifactID"},
+        {"type": "null"}
+      ]
+    },
+    "startedAt": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "endedAt": {
+      "oneOf": [
+        {"$ref": "common.schema.json#/$defs/timestamp"},
+        {"type": "null"}
+      ]
+    },
+    "executedBy": {"$ref": "common.schema.json#/$defs/actor"},
+    "createdPaths": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "common.schema.json#/$defs/relativePath"}
+    },
+    "modifiedPaths": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "common.schema.json#/$defs/relativePath"}
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status", "detail"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1, "maxLength": 128},
+          "status": {"enum": ["PENDING", "PASS", "BLOCKED", "FAILED", "ROLLED_BACK"]},
+          "detail": {"type": "string", "maxLength": 2048}
+        }
+      }
+    },
+    "rollbackPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "backupRef"],
+      "properties": {
+        "type": {"enum": ["REMOVE_CREATED_PATHS", "RESTORE_PREVIOUS_LINK_AND_REGISTRY", "RESTORE_BACKUP"]},
+        "backupRef": {
+          "oneOf": [
+            {"type": "string", "minLength": 1, "maxLength": 256},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "rollbackResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "detail"],
+          "properties": {
+            "status": {"enum": ["PASS", "BLOCKED", "FAILED", "NOT_RUN"]},
+            "detail": {"type": "string", "maxLength": 2048}
+          }
+        },
+        {"type": "null"}
+      ]
+    },
+    "finalStatus": {"enum": ["IN_PROGRESS", "COMMITTED", "ROLLED_BACK", "FAILED", "BLOCKED"]}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"finalStatus": {"const": "IN_PROGRESS"}}},
+      "then": {"properties": {"endedAt": {"type": "null"}}},
+      "else": {
+        "properties": {
+          "endedAt": {"$ref": "common.schema.json#/$defs/timestamp"}
+        }
+      }
+    }
+  ]
+}

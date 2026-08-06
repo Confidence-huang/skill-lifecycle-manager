@@ -1,0 +1,319 @@
+{
+  "valid": [
+    {
+      "name": "artifact manifest",
+      "schema": "artifact-manifest.schema.json",
+      "instance": {
+        "schemaVersion": 1,
+        "documentType": "CAPABILITY_ARTIFACT_MANIFEST",
+        "artifactID": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillName": "oil-visual",
+        "identity": {
+          "identityVersion": 1,
+          "sourceType": "GIT",
+          "canonicalSource": "https://github.com/oil-oil/oil-visual.git",
+          "resolvedCommit": "23d8aea9268b688e6036ac53b8f3a5807672a793",
+          "skillPath": ".",
+          "contentPolicyVersion": "logical-tree-sha256-v1",
+          "contentSHA256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "treeEntries": [
+          {
+            "path": "SKILL.md",
+            "type": "FILE",
+            "size": 128,
+            "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          }
+        ]
+      }
+    },
+    {
+      "name": "capability lock",
+      "schema": "capability-lock.schema.json",
+      "instance": {
+        "schemaVersion": 1,
+        "documentType": "AI_CAPABILITY_LOCK",
+        "hostID": "ubuntu-a",
+        "revision": 1,
+        "updatedAt": "2026-08-06T15:30:00Z",
+        "entries": [
+          {
+            "name": "oil-visual",
+            "artifactID": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "desiredLifecycleMode": "SOURCE",
+            "desiredActivity": "ACTIVE",
+            "targetScopes": ["USER"],
+            "targetAgents": ["CODEX"],
+            "approvalDecisionID": "decision-11111111-1111-4111-8111-111111111111",
+            "policyVersion": "local-policy-v1",
+            "rollbackArtifactID": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "capability evidence",
+      "schema": "evidence.schema.json",
+      "instance": {
+        "schemaVersion": 1,
+        "documentType": "CAPABILITY_EVIDENCE",
+        "evidenceID": "evidence-22222222-2222-4222-8222-222222222222",
+        "artifactID": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillName": "oil-visual",
+        "kind": "STATIC",
+        "tool": "skill-lifecycle-manager",
+        "toolVersion": "4.0.0",
+        "policyVersion": "local-policy-v1",
+        "generatedAt": "2026-08-06T15:10:00Z",
+        "hostID": "ubuntu-a",
+        "probeStatus": "PASS",
+        "findingCounts": {
+          "critical": 0,
+          "high": 0,
+          "medium": 0,
+          "low": 0,
+          "informational": 0,
+          "unknown": 0
+        },
+        "reportSHA256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "reportPath": "evidence/oil-visual/static.json",
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "approval decision",
+      "schema": "approval-decision.schema.json",
+      "instance": {
+        "schemaVersion": 1,
+        "documentType": "CAPABILITY_APPROVAL_DECISION",
+        "decisionID": "decision-11111111-1111-4111-8111-111111111111",
+        "artifactID": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillName": "oil-visual",
+        "requestedBy": "local-user",
+        "requestedAt": "2026-08-06T15:00:00Z",
+        "decision": "APPROVED",
+        "decidedBy": "local-user",
+        "decidedAt": "2026-08-06T15:20:00Z",
+        "policyVersion": "local-policy-v1",
+        "evidenceRefs": ["evidence-22222222-2222-4222-8222-222222222222"],
+        "reason": "Reviewed the exact synthetic artifact.",
+        "expiresAt": null,
+        "supersedesDecisionID": null
+      }
+    },
+    {
+      "name": "update preview",
+      "schema": "update-preview.schema.json",
+      "instance": {
+        "schemaVersion": 1,
+        "documentType": "CAPABILITY_UPDATE_PREVIEW",
+        "updateID": "update-33333333-3333-4333-8333-333333333333",
+        "skillName": "oil-visual",
+        "currentArtifactID": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "candidateArtifactID": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "requestedRef": "main",
+        "resolvedCommit": "dddddddddddddddddddddddddddddddddddddddd",
+        "ancestry": "FAST_FORWARD",
+        "commitsAhead": 1,
+        "fileChanges": {
+          "added": [],
+          "modified": ["SKILL.md"],
+          "removed": [],
+          "renamed": []
+        },
+        "contractChanges": {
+          "skillEntryChanged": true,
+          "referencedResourcesChanged": false,
+          "dependenciesChanged": false,
+          "networkBehaviorChanged": "UNKNOWN",
+          "probesChanged": false
+        },
+        "riskFlags": ["SKILL_ENTRY_CHANGED"],
+        "evidenceRefs": [],
+        "mutations": 0
+      }
+    },
+    {
+      "name": "committed transaction",
+      "schema": "transaction.schema.json",
+      "instance": {
+        "schemaVersion": 1,
+        "documentType": "CAPABILITY_TRANSACTION",
+        "transactionID": "transaction-44444444-4444-4444-8444-444444444444",
+        "action": "UPDATE",
+        "skillName": "oil-visual",
+        "approvalDecisionID": "decision-11111111-1111-4111-8111-111111111111",
+        "beforeArtifactID": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "afterArtifactID": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "startedAt": "2026-08-06T15:30:00Z",
+        "endedAt": "2026-08-06T15:31:00Z",
+        "executedBy": "skill-cli",
+        "createdPaths": ["sources/oil-visual-candidate"],
+        "modifiedPaths": ["activity/oil-visual", "registry/skills-registry.json"],
+        "steps": [
+          {"name": "activate", "status": "PASS", "detail": "Synthetic activation passed."}
+        ],
+        "rollbackPlan": {
+          "type": "RESTORE_PREVIOUS_LINK_AND_REGISTRY",
+          "backupRef": "backup-synthetic"
+        },
+        "rollbackResult": null,
+        "finalStatus": "COMMITTED"
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "git artifact without resolved commit",
+      "schema": "artifact-manifest.schema.json",
+      "instance": {
+        "schemaVersion": 1,
+        "documentType": "CAPABILITY_ARTIFACT_MANIFEST",
+        "artifactID": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillName": "oil-visual",
+        "identity": {
+          "identityVersion": 1,
+          "sourceType": "GIT",
+          "canonicalSource": "https://github.com/oil-oil/oil-visual.git",
+          "resolvedCommit": null,
+          "skillPath": ".",
+          "contentPolicyVersion": "logical-tree-sha256-v1",
+          "contentSHA256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "treeEntries": [
+          {
+            "path": "SKILL.md",
+            "type": "FILE",
+            "size": 128,
+            "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          }
+        ]
+      }
+    },
+    {
+      "name": "lock with mutable approval boolean",
+      "schema": "capability-lock.schema.json",
+      "instance": {
+        "schemaVersion": 1,
+        "documentType": "AI_CAPABILITY_LOCK",
+        "hostID": "ubuntu-a",
+        "revision": 1,
+        "updatedAt": "2026-08-06T15:30:00Z",
+        "entries": [
+          {
+            "name": "oil-visual",
+            "artifactID": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "desiredLifecycleMode": "SOURCE",
+            "desiredActivity": "ACTIVE",
+            "targetScopes": ["USER"],
+            "targetAgents": ["CODEX"],
+            "approvalDecisionID": "decision-11111111-1111-4111-8111-111111111111",
+            "policyVersion": "local-policy-v1",
+            "rollbackArtifactID": null,
+            "approved": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "evidence with absolute report path",
+      "schema": "evidence.schema.json",
+      "instance": {
+        "schemaVersion": 1,
+        "documentType": "CAPABILITY_EVIDENCE",
+        "evidenceID": "evidence-22222222-2222-4222-8222-222222222222",
+        "artifactID": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillName": "oil-visual",
+        "kind": "STATIC",
+        "tool": "skill-lifecycle-manager",
+        "toolVersion": "4.0.0",
+        "policyVersion": "local-policy-v1",
+        "generatedAt": "2026-08-06T15:10:00Z",
+        "hostID": "ubuntu-a",
+        "probeStatus": "PASS",
+        "findingCounts": {
+          "critical": 0,
+          "high": 0,
+          "medium": 0,
+          "low": 0,
+          "informational": 0,
+          "unknown": 0
+        },
+        "reportSHA256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "reportPath": "/home/a/private-report.json",
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "approval without evidence",
+      "schema": "approval-decision.schema.json",
+      "instance": {
+        "schemaVersion": 1,
+        "documentType": "CAPABILITY_APPROVAL_DECISION",
+        "decisionID": "decision-11111111-1111-4111-8111-111111111111",
+        "artifactID": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillName": "oil-visual",
+        "requestedBy": "local-user",
+        "requestedAt": "2026-08-06T15:00:00Z",
+        "decision": "APPROVED",
+        "decidedBy": "local-user",
+        "decidedAt": "2026-08-06T15:20:00Z",
+        "policyVersion": "local-policy-v1",
+        "evidenceRefs": [],
+        "reason": "No evidence is not enough.",
+        "expiresAt": null,
+        "supersedesDecisionID": null
+      }
+    },
+    {
+      "name": "preview reporting a mutation",
+      "schema": "update-preview.schema.json",
+      "instance": {
+        "schemaVersion": 1,
+        "documentType": "CAPABILITY_UPDATE_PREVIEW",
+        "updateID": "update-33333333-3333-4333-8333-333333333333",
+        "skillName": "oil-visual",
+        "currentArtifactID": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "candidateArtifactID": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "requestedRef": "main",
+        "resolvedCommit": "dddddddddddddddddddddddddddddddddddddddd",
+        "ancestry": "FAST_FORWARD",
+        "commitsAhead": 1,
+        "fileChanges": {"added": [], "modified": [], "removed": [], "renamed": []},
+        "contractChanges": {
+          "skillEntryChanged": false,
+          "referencedResourcesChanged": false,
+          "dependenciesChanged": false,
+          "networkBehaviorChanged": "NO",
+          "probesChanged": false
+        },
+        "riskFlags": [],
+        "evidenceRefs": [],
+        "mutations": 1
+      }
+    },
+    {
+      "name": "in-progress transaction with end time",
+      "schema": "transaction.schema.json",
+      "instance": {
+        "schemaVersion": 1,
+        "documentType": "CAPABILITY_TRANSACTION",
+        "transactionID": "transaction-44444444-4444-4444-8444-444444444444",
+        "action": "UPDATE",
+        "skillName": "oil-visual",
+        "approvalDecisionID": "decision-11111111-1111-4111-8111-111111111111",
+        "beforeArtifactID": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "afterArtifactID": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "startedAt": "2026-08-06T15:30:00Z",
+        "endedAt": "2026-08-06T15:31:00Z",
+        "executedBy": "skill-cli",
+        "createdPaths": [],
+        "modifiedPaths": [],
+        "steps": [],
+        "rollbackPlan": {"type": "REMOVE_CREATED_PATHS", "backupRef": null},
+        "rollbackResult": null,
+        "finalStatus": "IN_PROGRESS"
+      }
+    }
+  ]
+}

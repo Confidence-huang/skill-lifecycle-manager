@@ -36,3 +36,16 @@ state, or invokes GitHub CLI. `skill update --apply` remains the separate SOURCE
 
 Run `./bootstrap.sh` only after the checkout is clean and acceptance passes. It installs the reviewed
 checkout as the user-level `skill` command through `uv tool install --editable`.
+
+## V5 Phase A contract candidate
+
+The `schemas/` directory and `skill_lifecycle.contracts` module define the isolated V5 supply-chain
+contract candidate. They validate synthetic artifacts, desired locks, evidence, approval decisions,
+zero-write update previews, and transaction journals without reading or changing live lifecycle state.
+
+```bash
+uv run python -m unittest tests.test_contracts -v
+```
+
+Phase A is not CLI activation. It does not create a lock, approval, evidence report, transaction,
+Registry migration, or baseline. Read `references/supply-chain-v5.md` before extending this candidate.

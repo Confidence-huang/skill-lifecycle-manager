@@ -1,0 +1,59 @@
+{
+  "linuxStyleEntries": [
+    {
+      "path": "SKILL.md",
+      "type": "FILE",
+      "size": 128,
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "path": "references/guide.md",
+      "type": "FILE",
+      "size": 256,
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "path": "assets/current",
+      "type": "SYMLINK",
+      "linkTarget": "../shared/current"
+    }
+  ],
+  "windowsStyleEntries": [
+    {
+      "path": "assets\\current",
+      "type": "SYMLINK",
+      "linkTarget": "../shared/current"
+    },
+    {
+      "path": "references\\guide.md",
+      "type": "FILE",
+      "size": 256,
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "path": "SKILL.md",
+      "type": "FILE",
+      "size": 128,
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ],
+  "changedEntries": [
+    {
+      "path": "SKILL.md",
+      "type": "FILE",
+      "size": 129,
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    {
+      "path": "references/guide.md",
+      "type": "FILE",
+      "size": 256,
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "path": "assets/current",
+      "type": "SYMLINK",
+      "linkTarget": "../shared/current"
+    }
+  ]
+}

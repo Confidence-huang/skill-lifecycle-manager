@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skill-lifecycle-manager.local/schemas/v5/capability-lock.schema.json",
+  "title": "Host-local capability desired-state lock",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "documentType", "hostID", "revision", "updatedAt", "entries"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "documentType": {"const": "AI_CAPABILITY_LOCK"},
+    "hostID": {"$ref": "common.schema.json#/$defs/hostID"},
+    "revision": {"type": "integer", "minimum": 1},
+    "updatedAt": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "artifactID",
+          "desiredLifecycleMode",
+          "desiredActivity",
+          "targetScopes",
+          "targetAgents",
+          "approvalDecisionID",
+          "policyVersion",
+          "rollbackArtifactID"
+        ],
+        "properties": {
+          "name": {"$ref": "common.schema.json#/$defs/skillName"},
+          "artifactID": {"$ref": "common.schema.json#/$defs/artifactID"},
+          "desiredLifecycleMode": {"$ref": "common.schema.json#/$defs/lifecycleMode"},
+          "desiredActivity": {"enum": ["ACTIVE", "INACTIVE"]},
+          "targetScopes": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"$ref": "common.schema.json#/$defs/scope"}
+          },
+          "targetAgents": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1, "maxLength": 64}
+          },
+          "approvalDecisionID": {"$ref": "common.schema.json#/$defs/decisionID"},
+          "policyVersion": {"type": "string", "minLength": 1, "maxLength": 128},
+          "rollbackArtifactID": {
+            "oneOf": [
+              {"$ref": "common.schema.json#/$defs/artifactID"},
+              {"type": "null"}
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"desiredActivity": {"const": "ACTIVE"}}},
+            "then": {
+              "properties": {
+                "desiredLifecycleMode": {"enum": ["PACKAGE", "SOURCE", "HYBRID"]},
+                "targetScopes": {
+                  "items": {"enum": ["SYSTEM", "USER", "PROJECT"]}
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

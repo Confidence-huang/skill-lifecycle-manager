@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skill-lifecycle-manager.local/schemas/v5/evidence.schema.json",
+  "title": "Capability evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "documentType",
+    "evidenceID",
+    "artifactID",
+    "skillName",
+    "kind",
+    "tool",
+    "toolVersion",
+    "policyVersion",
+    "generatedAt",
+    "hostID",
+    "probeStatus",
+    "findingCounts",
+    "reportSHA256",
+    "reportPath",
+    "diagnostics"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "documentType": {"const": "CAPABILITY_EVIDENCE"},
+    "evidenceID": {"$ref": "common.schema.json#/$defs/evidenceID"},
+    "artifactID": {"$ref": "common.schema.json#/$defs/artifactID"},
+    "skillName": {"$ref": "common.schema.json#/$defs/skillName"},
+    "kind": {
+      "enum": ["STANDARD", "STATIC", "RUNTIME", "BEHAVIOR", "SECURITY", "QUALITY", "PROVENANCE"]
+    },
+    "tool": {"type": "string", "minLength": 1, "maxLength": 256},
+    "toolVersion": {"type": "string", "minLength": 1, "maxLength": 128},
+    "policyVersion": {"type": "string", "minLength": 1, "maxLength": 128},
+    "generatedAt": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "hostID": {"$ref": "common.schema.json#/$defs/hostID"},
+    "probeStatus": {"enum": ["PASS", "BLOCKED", "UNKNOWN", "NOT_CONFIGURED", "NOT_RUN"]},
+    "findingCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["critical", "high", "medium", "low", "informational", "unknown"],
+      "properties": {
+        "critical": {"type": "integer", "minimum": 0},
+        "high": {"type": "integer", "minimum": 0},
+        "medium": {"type": "integer", "minimum": 0},
+        "low": {"type": "integer", "minimum": 0},
+        "informational": {"type": "integer", "minimum": 0},
+        "unknown": {"type": "integer", "minimum": 0}
+      }
+    },
+    "reportSHA256": {"$ref": "common.schema.json#/$defs/sha256"},
+    "reportPath": {"$ref": "common.schema.json#/$defs/relativePath"},
+    "diagnostics": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {"type": "string", "maxLength": 2048}
+    }
+  }
+}
