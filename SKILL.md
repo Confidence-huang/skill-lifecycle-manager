@@ -137,6 +137,28 @@ mode, activity suggestion, and scope. Dirty worktrees, name collisions, incomple
 pointers, submodules, or Registry identity loss are hard blocks. Output is non-authoritative evidence;
 all lock candidates remain blocked until a later artifact-bound decision exists.
 
+## V5 Phase C isolated behavior candidate
+
+Phase C adds no public CLI and creates no live lock, decision, or transaction state. It provides two
+candidate primitives for later reviewed wiring:
+
+- `skill_lifecycle.contracts.require_current_approval` rejects artifact-mismatched, expired,
+  revoked, superseded, or evidence-free approvals without writes.
+- `skill_lifecycle.recovery` requires a zero-write inspection of one durable `IN_PROGRESS`
+  transaction before explicit removal of its declared created paths beneath one isolated owner root.
+
+Run the bounded fault matrix only in disposable roots:
+
+```bash
+uv run python -m unittest discover -s tests -p 'test_phase_c.py' -v
+```
+
+The suite injects a hard process exit before Registry publication, install/update final-write
+failures, activity collisions, stale approvals, and unsafe recovery paths. Passing Phase C does not
+authorize a real pilot; Phase D still requires a separately approved non-manager Skill, backup,
+rollback, baseline, and after-scan plan. Read
+[references/supply-chain-v5.md](references/supply-chain-v5.md).
+
 ## Completion checks
 
 After any implementation or environment change:

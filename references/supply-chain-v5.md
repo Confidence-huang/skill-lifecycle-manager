@@ -67,3 +67,30 @@ source facts match the pinned artifact. A reviewed-only source that remains abse
 `NOT_EVALUATED`; absence alone is not approval or convergence. Any name collision, physical-path
 misclassification, commit/lifecycle mismatch, dirty source, missing required Registry field, LFS pointer, or
 submodule stops the complete shadow run before publication.
+
+## Phase C isolated behavior contract
+
+Phase C runs only under temporary HOME/XDG-style roots. It exercises the real candidate install and
+update paths plus pure approval and recovery primitives; it does not add a public command or write
+formal V5 state.
+
+The accepted fixture matrix proves:
+
+- a hard child-process exit after PACKAGE activation leaves a declared residual path, requires a
+  zero-write recovery inspection, and removes only that path after explicit recovery;
+- an install Registry-publication failure removes only the new entity while preserving prior
+  Registry and activity canary bytes;
+- an update Registry-publication failure returns the clean managed repository to its exact prior
+  commit while preserving Registry and unrelated canary bytes;
+- physical and symbolic-link activity collisions stop before destination or Registry creation;
+- an approval is effective only for its exact artifact while unexpired and not revoked or expired
+  by a superseding append-only decision;
+- parent traversal and link-backed recovery owners stop before deletion.
+
+`skill_lifecycle.recovery` accepts only an `IN_PROGRESS` transaction with
+`REMOVE_CREATED_PATHS`, no modified paths, and portable relative created paths. Its inspection and
+apply calls remain separate. The durable transaction file is retained as evidence after recovery.
+
+Phase C passing only opens review of Phase D. It does not authorize a real capability lock,
+decision journal, transaction journal, activity switch, Registry migration, baseline change, or a
+pilot using `skill-lifecycle-manager` itself.
