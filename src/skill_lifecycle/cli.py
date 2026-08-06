@@ -18,6 +18,7 @@ from skill_lifecycle.freshness import check_updates  # Compare configured PACKAG
 from skill_lifecycle.inventory import governance_result, registry_result, report_result, scan_skills, write_registry  # Read and publish inventory evidence.
 from skill_lifecycle.operations import backup_preview, create_backup, inspect_install, install_skill, restore_backup, update_skill  # Execute explicit lifecycle transactions.
 from skill_lifecycle.paths import HostLayout, LifecycleBlocked  # Apply one host layout and shared stop gate.
+from skill_lifecycle.shadow import preview_shadow, write_shadow  # Compare pinned sources in an isolated output tree.
 from skill_lifecycle.stability import health, stabilize  # Freeze and compare stable-use evidence.
 from skill_lifecycle.verification import verify_target  # Collect bounded Static/Runtime/Behavior evidence.
 
@@ -74,6 +75,11 @@ def parser() -> argparse.ArgumentParser:
     stable = commands.add_parser("stabilize", help="Preview or freeze the verified host-local baseline")
     stable.add_argument("--apply", action="store_true")
     stable.add_argument("--archive-existing", action="store_true", help="Preserve and replace an existing baseline explicitly")
+    shadow = commands.add_parser("shadow", help="Generate V5 documents below the isolated shadow root")
+    shadow.add_argument("--registry-path", type=Path, required=True, help="Frozen Registry v1 input")
+    shadow.add_argument("--source-set", type=Path, required=True, help="Explicit pinned source-set JSON")
+    shadow.add_argument("--output-root", type=Path, required=True, help="New child below data-root/shadows")
+    shadow.add_argument("--apply", action="store_true", help="Publish only the isolated shadow output")
     health_parser = commands.add_parser("health", help="Compare frozen local evidence without writes or fetch")
     health_parser.add_argument("--project-root", type=Path)
     return root
@@ -130,6 +136,9 @@ def execute(arguments: argparse.Namespace, host: HostLayout) -> dict[str, Any]:
         return restore_backup(arguments.backup_path, arguments.destination, arguments.apply)
     if arguments.command == "stabilize":
         return stabilize(host, arguments.apply, arguments.archive_existing)
+    if arguments.command == "shadow":
+        shadow_arguments = (host, arguments.registry_path, arguments.source_set, arguments.output_root)
+        return write_shadow(*shadow_arguments) if arguments.apply else preview_shadow(*shadow_arguments)
     return health(host, arguments.project_root)
 
 

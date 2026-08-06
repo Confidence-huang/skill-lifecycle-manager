@@ -42,3 +42,24 @@ different content. Phase A does not decide trust from a matching hash.
 Continue to shadow generation only after all Schemas pass their meta-schema, every valid fixture
 passes, every negative fixture fails, full v4 regression passes on Ubuntu, and two host-style inputs
 produce the same artifact identity from the same logical source facts.
+
+## Phase B shadow contract
+
+Phase B reads one frozen Registry v1 snapshot plus an explicit source-set document. The source set
+pins the exact Registry file SHA256 so preview and apply cannot silently use different observations. Every source pins
+its canonical remote, full commit, Skill path, role, suggested lifecycle mode, activity, and scopes.
+Artifact content comes from the full committed Git tree, not mutable working-tree bytes. This broad
+tree policy conservatively includes root-level shared resources; LFS pointers and submodules block the
+run because their complete bytes are not present in the parent commit tree.
+
+Preview creates no directory and reports exact output hashes. `--apply` may publish only a new named
+child below `data-root/shadows`; an existing destination is a collision. The output contains artifact
+manifests, provenance evidence, a host-local comparison report, and lock candidates. It contains no
+decision and no valid capability lock: every candidate has `approvalDecisionID: null` and
+`eligibility: BLOCKED_MISSING_APPROVAL`.
+
+An active Registry record without a real lock is reported as `UNMANAGED`, even when its observed
+source facts match the pinned artifact. A reviewed-only source that remains absent is
+`NOT_EVALUATED`; absence alone is not approval or convergence. Any name collision, physical-path
+misclassification, commit/lifecycle mismatch, dirty source, missing V4 field, LFS pointer, or
+submodule stops the complete shadow run before publication.

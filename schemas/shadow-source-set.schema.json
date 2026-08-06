@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skill-lifecycle-manager.local/schemas/v5/shadow-source-set.schema.json",
+  "title": "Explicit Phase B shadow source set",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "documentType",
+    "hostID",
+    "generatedAt",
+    "expectedRegistrySHA256",
+    "targetAgents",
+    "policyVersion",
+    "sources"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "documentType": {"const": "AI_CAPABILITY_SHADOW_SOURCE_SET"},
+    "hostID": {"$ref": "common.schema.json#/$defs/hostID"},
+    "generatedAt": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "expectedRegistrySHA256": {"$ref": "common.schema.json#/$defs/sha256"},
+    "targetAgents": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 64}
+    },
+    "policyVersion": {"type": "string", "minLength": 1, "maxLength": 128},
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "repositoryPath",
+          "skillPath",
+          "expectedName",
+          "canonicalSource",
+          "expectedCommit",
+          "suggestedLifecycleMode",
+          "suggestedActivity",
+          "targetScopes"
+        ],
+        "properties": {
+          "role": {"enum": ["ACTIVE_OBSERVED", "REVIEW_ONLY"]},
+          "repositoryPath": {"type": "string", "minLength": 1, "maxLength": 4096},
+          "skillPath": {
+            "oneOf": [
+              {"const": "."},
+              {"$ref": "common.schema.json#/$defs/relativePath"}
+            ]
+          },
+          "expectedName": {"$ref": "common.schema.json#/$defs/skillName"},
+          "canonicalSource": {"type": "string", "minLength": 1, "maxLength": 4096},
+          "expectedCommit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+          "suggestedLifecycleMode": {"enum": ["PACKAGE", "SOURCE", "HYBRID"]},
+          "suggestedActivity": {"enum": ["ACTIVE", "INACTIVE"]},
+          "targetScopes": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"enum": ["SYSTEM", "USER", "PROJECT"]}
+          }
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"role": {"const": "ACTIVE_OBSERVED"}}},
+            "then": {"properties": {"suggestedActivity": {"const": "ACTIVE"}}},
+            "else": {"properties": {"suggestedActivity": {"const": "INACTIVE"}}}
+          }
+        ]
+      }
+    }
+  }
+}

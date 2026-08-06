@@ -25,6 +25,8 @@ The normal Ubuntu entrypoint is the Python 3.12 `skill` command installed from t
 10. Verify never repairs dependencies, edits a failing Skill, changes PATH, or retries credentials.
 11. Backup records symbolic links without following them; restore requires an empty destination.
 12. Health is always read-only and never fetches, installs, updates, deletes, grades, or routes.
+13. Shadow generation reads a frozen Registry and exact Git commits; it may write only a new child
+    below `data-root/shadows` after `--apply`, and it never creates approval or authoritative lock state.
 
 ## Command entry
 
@@ -118,6 +120,22 @@ The repository contains machine-valid V5 supply-chain Schemas and pure artifact-
 They are an isolated candidate, not an active Registry migration or approval system. Do not create
 live lock, evidence, decision, or transaction state from these files until later phases pass their
 separate stop gates. Read [references/supply-chain-v5.md](references/supply-chain-v5.md).
+
+## V5 Phase B shadow candidate
+
+```bash
+skill shadow --registry-path /exact/skills-registry.json \
+  --source-set /exact/shadow-source-set.json \
+  --output-root /exact/data-root/shadows/run-id
+skill shadow --registry-path /exact/skills-registry.json \
+  --source-set /exact/shadow-source-set.json \
+  --output-root /exact/data-root/shadows/run-id --apply
+```
+
+The source set must pin every Git repository, commit, canonical remote, Skill path, role, lifecycle
+mode, activity suggestion, and scope. Dirty worktrees, name collisions, incomplete Git objects, LFS
+pointers, submodules, or Registry identity loss are hard blocks. Output is non-authoritative evidence;
+all lock candidates remain blocked until a later artifact-bound decision exists.
 
 ## Completion checks
 

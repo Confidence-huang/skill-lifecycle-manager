@@ -27,6 +27,7 @@ skill updates (--name NAME | --all)
 skill backup --path PATH [--path PATH ...] [--apply]
 skill restore --backup-path PATH --destination PATH [--apply]
 skill stabilize [--apply] [--archive-existing]
+skill shadow --registry-path PATH --source-set PATH --output-root PATH [--apply]
 skill health [--project-root PATH]
 ```
 
@@ -49,3 +50,10 @@ uv run python -m unittest tests.test_contracts -v
 
 Phase A is not CLI activation. It does not create a lock, approval, evidence report, transaction,
 Registry migration, or baseline. Read `references/supply-chain-v5.md` before extending this candidate.
+
+## V5 Phase B shadow candidate
+
+`skill shadow` reads one frozen Registry v1 file and explicitly pinned Git sources. Preview returns
+exact planned file hashes with `mutations: 0`; `--apply` may publish only a new named child below
+`data-root/shadows`. Every proposed lock entry remains `BLOCKED_MISSING_APPROVAL`, so shadow output
+cannot become desired state or authorize activation.

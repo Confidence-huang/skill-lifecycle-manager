@@ -11,6 +11,9 @@ offline identifiers; validators must register the local files and must not fetch
 | `approval-decision.schema.json` | One append-only approval, rejection, revocation, or expiry |
 | `update-preview.schema.json` | Structured candidate difference with `mutations: 0` |
 | `transaction.schema.json` | One applied mutation, rollback plan, and final result |
+| `shadow-source-set.schema.json` | Explicit host, time, Git pins, roles, and suggestions for Phase B |
+| `shadow-report.schema.json` | Host-local Registry/source comparison with `mutations: 0` |
+| `lock-candidates.schema.json` | Non-authoritative candidates blocked by missing approvals |
 | `common.schema.json` | Shared IDs, paths, timestamps, hashes, scopes, and tree entries |
 
 The schemas intentionally reject unknown properties. A future additive field therefore requires a
