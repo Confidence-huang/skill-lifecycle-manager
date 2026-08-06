@@ -11,6 +11,7 @@ from __future__ import annotations  # Keep modern type syntax stable on Python 3
 import hashlib  # Fingerprint stable physical inventory independently from presentation fields.
 import json  # Build deterministic Registry identity and a YAML-compatible mirror.
 import os  # Walk Skill trees without following symbolic-link directories.
+import re  # Validate stable semantic versions and bounded tag prefixes in PACKAGE update contracts.
 import subprocess  # Query Git identity without a shell command string.
 from datetime import datetime, timezone  # Timestamp completed evidence in UTC.
 from pathlib import Path  # Preserve Linux case-sensitive path identity.
@@ -19,7 +20,7 @@ from typing import Any, Iterable  # Describe the structured Registry data flow.
 from skill_lifecycle.paths import HostLayout, atomic_json, atomic_text, sha256_file  # Publish verified state safely.
 
 
-GENERATOR = "skill-lifecycle-manager/4.0.0"  # Identify the first Python Linux-native Registry producer.
+GENERATOR = "skill-lifecycle-manager/4.1.0"  # Identify Registries that include PACKAGE freshness contracts.
 
 CAPABILITY_RULES = {
     "lifecycle-governance": ("skill", "lifecycle", "registry", "governance", "archive"),
@@ -28,6 +29,9 @@ CAPABILITY_RULES = {
     "documents-media": ("document", "pdf", "slide", "video", "audio", "image"),
     "hardware-embedded": ("mcu", "stm32", "mspm0", "embedded", "hardware", "k230"),
 }  # Lexical navigation rules never claim semantic equivalence or quality.
+
+STABLE_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")  # PACKAGE baselines exclude prerelease ambiguity.
+TAG_PREFIX = re.compile(r"^[A-Za-z0-9._-]{0,32}$")  # A short literal prefix cannot become an open-ended ref expression.
 
 
 def utc_now() -> str:
@@ -59,6 +63,72 @@ def read_skill(skill_file: Path) -> tuple[str, str, list[str]]:
     if not description:
         issues.append("Frontmatter description is missing.")
     return name, description, issues
+
+
+# --- Validate one optional release-check contract ---
+def validate_updates(updates: Any) -> tuple[dict[str, Any] | None, list[str]]:
+    """Accept the dependency-free git-tag and CLI fields used by read-only freshness checks."""
+    if updates is None:  # Historical PACKAGE records remain valid without freshness configuration.
+        return None, []
+    if not isinstance(updates, dict):  # Structured fields prevent a scalar from becoming command input.
+        return None, ["Installed-package update contract must be an object."]
+
+    strategy = updates.get("strategy")  # Only an implemented strategy can reach a network probe.
+    repository = updates.get("repository")  # The reviewed Git endpoint is passed as one argument.
+    tag_prefix = updates.get("tagPrefix", "v")  # Literal `v` matches common stable release tags.
+    baseline = updates.get("baselineVersion")  # Adapter compatibility remains distinct from live CLI state.
+    cli = updates.get("cli")  # CLI evidence is optional for packages without a companion executable.
+    issues: list[str] = []
+    if strategy != "git-tags":
+        issues.append("Installed-package update strategy must be git-tags.")
+    if not isinstance(repository, str) or not repository.strip():
+        issues.append("Installed-package update repository must be a non-empty string.")
+    if not isinstance(tag_prefix, str) or not TAG_PREFIX.fullmatch(tag_prefix):
+        issues.append("Installed-package tagPrefix must be a short literal ref prefix.")
+    if not isinstance(baseline, str) or not STABLE_VERSION.fullmatch(baseline):
+        issues.append("Installed-package baselineVersion must be MAJOR.MINOR.PATCH.")
+    if cli is not None:
+        if not isinstance(cli, dict):
+            issues.append("Installed-package cli contract must be an object.")
+        else:
+            command = cli.get("command")  # Command names are resolved through PATH without a shell.
+            arguments = cli.get("arguments", [])  # Every argument remains one literal subprocess item.
+            if not isinstance(command, str) or not command.strip():
+                issues.append("Installed-package cli command must be a non-empty string.")
+            if not isinstance(arguments, list) or not all(isinstance(item, str) for item in arguments):
+                issues.append("Installed-package cli arguments must be a string array.")
+    if issues:
+        return None, issues  # Invalid contracts stay visible but can never trigger a subprocess.
+    return {
+        "strategy": strategy,
+        "repository": repository.strip(),
+        "tagPrefix": tag_prefix,
+        "baselineVersion": baseline,
+        "cli": cli,
+    }, []  # Registry stores the normalized executable contract, not unrelated package metadata.
+
+
+# --- Read PACKAGE provenance beside one physical Skill ---
+def read_package_record(skill_root: Path) -> tuple[dict[str, Any] | None, str | None, list[str]]:
+    """Return validated PACKAGE provenance, its hash, and literal evidence gaps."""
+    record_path = skill_root / ".skill-lifecycle.json"  # The provenance record travels with PACKAGE bytes.
+    if not record_path.is_file():
+        return None, None, []  # Older unmanaged packages remain observable without invented history.
+    try:
+        record = json.loads(record_path.read_text(encoding="utf-8"))  # JSON is the established schema-1 format.
+    except (OSError, json.JSONDecodeError) as error:
+        return None, sha256_file(record_path), [f"Installed-package provenance is unreadable: {error}"]
+    if not isinstance(record, dict) or record.get("schemaVersion") != 1 or record.get("lifecycleMode") != "PACKAGE":
+        return None, sha256_file(record_path), ["Installed-package provenance uses an unsupported schema."]
+
+    updates, update_issues = validate_updates(record.get("updates"))  # Untrusted command fields pass one strict gate.
+    normalized = {
+        "origin": record.get("origin") if isinstance(record.get("origin"), str) else None,
+        "remote": record.get("remote") if isinstance(record.get("remote"), str) else None,
+        "commit": record.get("commit") if isinstance(record.get("commit"), str) else None,
+        "updates": updates,
+    }  # Only provenance and freshness fields belong in Registry evidence.
+    return normalized, sha256_file(record_path), update_issues
 
 
 def walk_skill_files(entry: Path) -> Iterable[Path]:
@@ -174,6 +244,7 @@ def inventory_fingerprint(records: list[dict[str, Any]]) -> str:
             "lifecycleMode": record["lifecycleMode"],
             "commit": record["commit"],
             "skillSHA256": record["skillSHA256"],
+            "lifecycleSHA256": record["lifecycleSHA256"],
         }
         for record in records
     ]
@@ -204,6 +275,8 @@ def scan_skills(activity_roots: Iterable[Path]) -> dict[str, Any]:
                 if physical_key not in records_by_file:
                     name, description, issues = read_skill(physical_file)
                     git = git_identity(physical_file.parent)
+                    package, lifecycle_hash, package_issues = read_package_record(physical_file.parent)
+                    issues.extend(package_issues)  # Malformed provenance degrades evidence instead of disappearing.
                     is_link = entry.is_symlink()
                     if git["repository"]:
                         mode = "HYBRID" if git["entryCount"] > 1 else "SOURCE"
@@ -218,17 +291,19 @@ def scan_skills(activity_roots: Iterable[Path]) -> dict[str, Any]:
                         "lifecycleMode": mode,
                         "activePaths": [],
                         "physicalPath": str(physical_file.parent),
-                        "origin": None,
+                        "origin": package.get("origin") if package and not git["repository"] else None,
                         "sourceRepository": git["repository"],
-                        "remote": git["remote"],
+                        "remote": git["remote"] or (package.get("remote") if package else None),
                         "branch": git["branch"],
-                        "commit": git["commit"],
+                        "commit": git["commit"] or (package.get("commit") if package else None),
                         "entryCount": git["entryCount"],
                         "issues": issues,
                         "isTopLevel": str(relative) == ".",
                         "capabilityDomains": domains,
                         "capabilityEvidence": domain_evidence,
                         "skillSHA256": sha256_file(physical_file),
+                        "lifecycleSHA256": lifecycle_hash,
+                        "updates": package.get("updates") if package and not git["repository"] else None,
                         "sourceDirty": git["dirty"],
                     }
                 records_by_file[physical_key]["activePaths"].append(str(active_path))

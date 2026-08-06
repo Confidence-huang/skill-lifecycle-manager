@@ -1,5 +1,6 @@
-"""Prove install preview, activation, collision refusal, and reverse cleanup."""
+"""Prove install preview, PACKAGE provenance, activation, collision refusal, and reverse cleanup."""
 
+import json  # Read the installed PACKAGE provenance contract as exact evidence.
 import tempfile  # Keep every source and destination below a disposable root.
 import unittest  # Run with the Python standard library.
 from pathlib import Path  # Inspect package files and activity symbolic links.
@@ -37,10 +38,36 @@ class InstallTests(unittest.TestCase):
             activity_is_link = activity.is_symlink()
             same_destination = activity.resolve() == Path(installed["destination"]).resolve()
             registry_exists = host.registry_path.is_file()
+            lifecycle = json.loads((activity / ".skill-lifecycle.json").read_text(encoding="utf-8"))
         self.assertTrue(activity_is_directory)
         self.assertFalse(activity_is_link)
         self.assertTrue(same_destination)
         self.assertTrue(registry_exists)
+        self.assertEqual(lifecycle["lifecycleMode"], "PACKAGE")
+        self.assertEqual(lifecycle["origin"], str(package))
+
+    def test_package_install_preserves_valid_update_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            host = layout(root / "host")
+            package = create_skill(root / "package", "example")
+            lifecycle = {
+                "schemaVersion": 1,
+                "lifecycleMode": "PACKAGE",
+                "origin": "/publisher/source",
+                "updates": {
+                    "strategy": "git-tags",
+                    "repository": "https://example.invalid/example.git",
+                    "tagPrefix": "v",
+                    "baselineVersion": "1.2.3",
+                    "cli": {"command": "example", "arguments": ["version"]},
+                },
+            }
+            (package / ".skill-lifecycle.json").write_text(json.dumps(lifecycle), encoding="utf-8")
+            installed = install_skill(host, str(package), "package")
+            record = json.loads((Path(installed["activityPath"]) / ".skill-lifecycle.json").read_text(encoding="utf-8"))
+        self.assertEqual(record["origin"], str(package))
+        self.assertEqual(record["updates"], lifecycle["updates"])
 
     def test_existing_activity_is_a_hard_collision(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -63,6 +90,17 @@ class InstallTests(unittest.TestCase):
             data_exists = host.data_root.exists()
         self.assertFalse(activity_exists)
         self.assertFalse(data_exists)
+
+    def test_invalid_package_provenance_is_blocked_during_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            host = layout(root / "host")
+            package = create_skill(root / "package", "example")
+            (package / ".skill-lifecycle.json").write_text("{ invalid", encoding="utf-8")
+            with self.assertRaises(LifecycleBlocked):
+                inspect_install(host, str(package), "package", None)
+            live_roots_exist = host.activity_root.exists() or host.state_root.exists()
+        self.assertFalse(live_roots_exist)
 
     def test_registry_failure_rolls_back_activity_and_entity(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

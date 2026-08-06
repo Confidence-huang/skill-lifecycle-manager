@@ -5,7 +5,7 @@ import unittest  # Keep acceptance dependency-free under uv.
 from pathlib import Path  # Create native case-sensitive files and symbolic links.
 
 from skill_lifecycle.inventory import governance_result, registry_result, report_result, scan_skills, write_registry
-from support import create_skill, layout  # Reuse deterministic Skill and host fixtures.
+from support import create_skill, layout, write_lifecycle_record  # Reuse deterministic Skill and PACKAGE provenance fixtures.
 
 
 class InventoryTests(unittest.TestCase):
@@ -43,6 +43,53 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(inventory["summary"]["inventory"]["nameCollisionGroups"], 1)
         self.assertTrue(all(record["governanceState"] == "REVIEW_REQUIRED" for record in inventory["skills"]))
         self.assertTrue(all(record["overallGrade"] == "UNRATED" for record in inventory["skills"]))
+
+    def test_package_provenance_and_updates_are_published(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            activity = Path(temporary) / "activity"
+            skill = create_skill(activity / "spec-kit", "spec-kit")
+            lifecycle = {
+                "schemaVersion": 1,
+                "lifecycleMode": "PACKAGE",
+                "origin": "/reviewed/package",
+                "remote": None,
+                "commit": None,
+                "selectedSkillPath": ".",
+                "installedAt": "2026-08-05T00:00:00+00:00",
+                "updates": {
+                    "strategy": "git-tags",
+                    "repository": "https://github.com/github/spec-kit.git",
+                    "tagPrefix": "v",
+                    "baselineVersion": "0.13.0",
+                    "cli": {"command": "specify", "arguments": ["version"]},
+                },
+            }
+            write_lifecycle_record(skill, lifecycle)
+            observed = scan_skills([activity])["skills"][0]
+        self.assertEqual(observed["origin"], "/reviewed/package")
+        self.assertEqual(observed["updates"]["baselineVersion"], "0.13.0")
+        self.assertIsNotNone(observed["lifecycleSHA256"])
+
+    def test_package_lifecycle_change_affects_inventory_fingerprint(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            activity = Path(temporary) / "activity"
+            skill = create_skill(activity / "package", "package")
+            lifecycle = {"schemaVersion": 1, "lifecycleMode": "PACKAGE", "origin": "/one"}
+            write_lifecycle_record(skill, lifecycle)
+            before = scan_skills([activity])["inventoryFingerprint"]
+            lifecycle["origin"] = "/two"
+            write_lifecycle_record(skill, lifecycle)
+            after = scan_skills([activity])["inventoryFingerprint"]
+        self.assertNotEqual(before, after)
+
+    def test_invalid_package_lifecycle_record_is_unknown(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            activity = Path(temporary) / "activity"
+            skill = create_skill(activity / "package", "package")
+            (skill / ".skill-lifecycle.json").write_text("{ invalid", encoding="utf-8")
+            observed = scan_skills([activity])["skills"][0]
+        self.assertEqual(observed["status"], "UNKNOWN")
+        self.assertTrue(any("provenance is unreadable" in issue for issue in observed["issues"]))
 
     def test_registry_preview_writes_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

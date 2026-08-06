@@ -79,10 +79,14 @@ skill install https://github.com/owner/repository.git --mode source --apply
 skill install https://github.com/owner/repository.git --mode hybrid --skill-path skills/chosen --apply
 skill update --name hop
 skill update --name hop --apply
+skill updates --name spec-kit
+skill updates --all
 ```
 
 Install publishes Registry evidence only after activation and required install probes pass. Update
-never uses unchecked pull or history rewriting. Read [references/operations.md](references/operations.md).
+never uses unchecked pull or history rewriting. `updates` is a separate zero-write PACKAGE release
+check: it reads configured stable Git tags and optional CLI version evidence without fetching,
+installing, upgrading, or requiring GitHub CLI. Read [references/operations.md](references/operations.md).
 
 ## Backup and restore
 

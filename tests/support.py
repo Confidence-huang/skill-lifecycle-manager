@@ -22,6 +22,13 @@ def create_skill(root: Path, name: str, body: str = "# Test Skill\n") -> Path:
     return root
 
 
+def write_lifecycle_record(root: Path, record: dict) -> Path:
+    """Publish one JSON PACKAGE provenance record beside a fixture Skill."""
+    path = root / ".skill-lifecycle.json"  # PACKAGE provenance travels with the copied Skill entity.
+    path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")  # JSON stays directly readable by the dependency-free runtime.
+    return path  # Tests use the exact path for hash and preservation assertions.
+
+
 def write_manifest(root: Path, runtime: dict | None = None, behavior: dict | None = None, required: list[str] | None = None) -> Path:
     """Write one dependency-free manifest from explicit probe dictionaries."""
     name = next(line.split(":", 1)[1].strip() for line in (root / "SKILL.md").read_text(encoding="utf-8").splitlines() if line.startswith("name:"))

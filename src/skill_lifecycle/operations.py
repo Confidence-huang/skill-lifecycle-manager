@@ -18,7 +18,7 @@ from datetime import datetime, timezone  # Name backups uniquely in UTC.
 from pathlib import Path  # Enforce POSIX containment and empty-destination rules.
 from typing import Any, Iterable  # Describe command feedback and explicit path collections.
 
-from skill_lifecycle.inventory import read_skill, write_registry  # Validate entries and publish Registry last.
+from skill_lifecycle.inventory import read_package_record, read_skill, write_registry  # Validate entries, PACKAGE provenance, and final Registry evidence.
 from skill_lifecycle.paths import HostLayout, LifecycleBlocked, atomic_json, sha256_file  # Enforce shared stop gates.
 
 
@@ -68,6 +68,10 @@ def inspect_install(layout: HostLayout, source: str, mode: str, skill_path: str 
         selected = detected if mode == "auto" else mode.lower()
         if selected not in {"package", "source", "hybrid"}:
             raise LifecycleBlocked(f"Unsupported install mode: {mode}")
+        if selected == "package":
+            _, _, package_issues = read_package_record(candidate)  # Preview validates the same provenance applied installation will preserve.
+            if package_issues:
+                raise LifecycleBlocked(f"Candidate PACKAGE provenance is invalid: {package_issues}")
         activity = layout.activity_root / name
         owner = layout.activity_root if selected == "package" else layout.data_root / "sources"
         destination = activity if selected == "package" else owner / name
@@ -110,12 +114,32 @@ def install_skill(layout: HostLayout, source: str, mode: str = "auto", skill_pat
                 raise LifecycleBlocked(f"Git clone failed: {completed.stderr.strip()}")
         candidate = find_candidate(staged, skill_path)
         relative_skill = candidate.relative_to(staged)
+        candidate_updates = None  # SOURCE/HYBRID entries never consume PACKAGE-only provenance.
+        if selected == "package":
+            candidate_package, _, package_issues = read_package_record(candidate)  # Preserve only a validated optional update channel.
+            if package_issues:
+                raise LifecycleBlocked(f"Candidate PACKAGE provenance is invalid: {package_issues}")
+            candidate_updates = candidate_package.get("updates") if candidate_package else None
         try:
             owner.mkdir(parents=True, exist_ok=True)  # This transaction owns its mode-specific destination.
             if selected == "package":
                 shutil.copytree(candidate, destination, symlinks=True)
                 installed_skill = destination
                 created_destination = destination  # PACKAGE activation is the one physical entity.
+                remote_result = run_git(candidate, "remote", "get-url", "origin")  # Git-backed packages retain publisher evidence.
+                commit_result = run_git(candidate, "rev-parse", "HEAD")  # A full commit pins the copied source snapshot when available.
+                lifecycle_record = {
+                    "schemaVersion": 1,
+                    "lifecycleMode": "PACKAGE",
+                    "origin": source,
+                    "remote": remote_result.stdout.strip() if remote_result.returncode == 0 else None,
+                    "commit": commit_result.stdout.strip() if commit_result.returncode == 0 else None,
+                    "selectedSkillPath": str(relative_skill),
+                    "installedAt": datetime.now(timezone.utc).isoformat(),
+                }
+                if candidate_updates:
+                    lifecycle_record["updates"] = candidate_updates  # Reviewed release metadata survives PACKAGE copying.
+                atomic_json(installed_skill / ".skill-lifecycle.json", lifecycle_record)  # Publish provenance before verification and Registry.
             else:
                 shutil.move(str(staged), str(destination))
                 installed_skill = destination / relative_skill

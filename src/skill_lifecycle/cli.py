@@ -14,6 +14,7 @@ import sys  # Refuse non-Linux runtime and separate BLOCKED diagnostics.
 from pathlib import Path  # Preserve POSIX paths from the CLI boundary.
 from typing import Any  # Describe the structured result passed to the renderer.
 
+from skill_lifecycle.freshness import check_updates  # Compare configured PACKAGE releases without writes or fetch.
 from skill_lifecycle.inventory import governance_result, registry_result, report_result, scan_skills, write_registry  # Read and publish inventory evidence.
 from skill_lifecycle.operations import backup_preview, create_backup, inspect_install, install_skill, restore_backup, update_skill  # Execute explicit lifecycle transactions.
 from skill_lifecycle.paths import HostLayout, LifecycleBlocked  # Apply one host layout and shared stop gate.
@@ -56,6 +57,11 @@ def parser() -> argparse.ArgumentParser:
     update = commands.add_parser("update", help="Preview or apply one validated fast-forward update")
     update.add_argument("--name", required=True)
     update.add_argument("--apply", action="store_true")
+
+    updates = commands.add_parser("updates", help="Check configured PACKAGE release freshness without writes")
+    updates_target = updates.add_mutually_exclusive_group(required=True)
+    updates_target.add_argument("--name", help="Check one exact Registry name")
+    updates_target.add_argument("--all", dest="all_skills", action="store_true", help="Check every configured PACKAGE")
 
     backup = commands.add_parser("backup", help="Preview or create a link-aware backup")
     backup.add_argument("--path", action="append", type=Path, required=True, help="Explicit root; repeat as needed")
@@ -116,6 +122,8 @@ def execute(arguments: argparse.Namespace, host: HostLayout) -> dict[str, Any]:
         return install_skill(host, source, arguments.mode, arguments.skill_path) if arguments.apply else inspect_install(host, source, arguments.mode, arguments.skill_path)
     if arguments.command == "update":
         return update_skill(host, arguments.name, arguments.apply)
+    if arguments.command == "updates":
+        return check_updates(host, arguments.name)
     if arguments.command == "backup":
         return create_backup(host, arguments.path) if arguments.apply else backup_preview(host, arguments.path)
     if arguments.command == "restore":

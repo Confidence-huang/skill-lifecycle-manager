@@ -1,4 +1,4 @@
 interface:
   display_name: "Skill Lifecycle Manager"
-  short_description: "Inventory and verify Skill assets with rollback"
-  default_prompt: "Use $skill-lifecycle-manager to inspect Skill assets, run explicit Static, Runtime, and Behavior Health verification without auto-repair, maintain evidence-backed governance and rollback boundaries, and perform only the requested lifecycle operation."
+  short_description: "Inventory, verify, and check Skill release freshness"
+  default_prompt: "Use $skill-lifecycle-manager to inspect Skill assets, check configured PACKAGE releases without writes, run explicit Static, Runtime, and Behavior Health verification without auto-repair, maintain evidence-backed governance and rollback boundaries, and perform only the requested lifecycle operation."

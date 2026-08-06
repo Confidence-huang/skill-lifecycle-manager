@@ -32,6 +32,8 @@ Windows Registry with D-drive paths is historical input, not current Linux state
 | `remote` | Git origin URL when available. |
 | `branch` | Current local branch when available. |
 | `commit` | Full local commit SHA when available. |
+| `lifecycleSHA256` | Hash of optional `.skill-lifecycle.json` PACKAGE provenance; null when absent. |
+| `updates` | Validated zero-write PACKAGE release contract; null when not configured. |
 | `entryCount` | Eligible `SKILL.md` entries in the containing Git repository. |
 | `issues` | Exact reasons for `BLOCKED` or `UNKNOWN`, never hidden behind a generic health score. |
 | `isTopLevel` | Whether any activation path is a direct child of a scanned root. |
@@ -68,6 +70,8 @@ Windows Registry with D-drive paths is historical input, not current Linux state
 - Treat equal names with different physical paths as a name collision, not as proven duplicates.
 - Do not infer publisher identity from matching SHA256 values.
 - Do not treat a branch name as an immutable version.
+- Treat an adapter `baselineVersion` as reviewed compatibility evidence, not proof that its companion CLI is installed.
+- Keep release checks separate from offline health and applied source updates; freshness probes never rewrite Registry state.
 - Treat capability domains as a navigation graph, not proof that two Skills are duplicates.
 - Treat evidence readiness as evidence completeness, not quality, safety, popularity, or business value.
 - Keep overall grades UNRATED when behavior, usage, or security evidence is missing.

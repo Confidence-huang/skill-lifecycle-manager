@@ -14,6 +14,26 @@
 
 The installer does not overwrite or merge an existing active Skill. Collision resolution is a separate review because equal names do not establish equal contents.
 
+For PACKAGE mode, `.skill-lifecycle.json` preserves the installation input and optional immutable
+Git evidence. Its optional `updates` object may configure a read-only stable-release channel:
+
+```json
+{
+  "strategy": "git-tags",
+  "repository": "https://github.com/github/spec-kit.git",
+  "tagPrefix": "v",
+  "baselineVersion": "0.13.0",
+  "cli": {"command": "specify", "arguments": ["version"]}
+}
+```
+
+`skill updates --name NAME` checks one exact Registry record; `skill updates --all` checks every
+configured record. The command accepts only exact `MAJOR.MINOR.PATCH` tags under the literal prefix,
+uses `git ls-remote --tags` without fetch, and reports the optional CLI as `INSTALLED`,
+`NOT_INSTALLED`, `NOT_CONFIGURED`, or `UNKNOWN`. Comparison reports `CURRENT`,
+`UPDATE_AVAILABLE`, `AHEAD`, `UNKNOWN`, or `NOT_CONFIGURED`. Every path reports `mutations: 0`.
+GitHub CLI is neither invoked nor required.
+
 Verification never repairs a missing module, executable, dependency, environment variable, or behavior result. `UNKNOWN` means the probe could not establish the fact; `BLOCKED` means the declared contract was executed or parsed and failed.
 
 ## Update transaction
