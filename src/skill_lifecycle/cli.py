@@ -18,6 +18,7 @@ from skill_lifecycle.freshness import check_updates  # Compare configured PACKAG
 from skill_lifecycle.inventory import governance_result, registry_result, report_result, scan_skills, write_registry  # Read and publish inventory evidence.
 from skill_lifecycle.operations import backup_preview, create_backup, inspect_install, install_skill, restore_backup, update_skill  # Execute explicit lifecycle transactions.
 from skill_lifecycle.paths import HostLayout, LifecycleBlocked  # Apply one host layout and shared stop gate.
+from skill_lifecycle.pilot import activate_pilot, approve_pilot, rollback_pilot, verify_pilot  # Run the reviewed Phase D decision-to-rollback chain.
 from skill_lifecycle.shadow import preview_shadow, write_shadow  # Compare pinned sources in an isolated output tree.
 from skill_lifecycle.stability import health, stabilize  # Freeze and compare stable-use evidence.
 from skill_lifecycle.verification import verify_target  # Collect bounded Static/Runtime/Behavior evidence.
@@ -80,6 +81,46 @@ def parser() -> argparse.ArgumentParser:
     shadow.add_argument("--source-set", type=Path, required=True, help="Explicit pinned source-set JSON")
     shadow.add_argument("--output-root", type=Path, required=True, help="New child below data-root/shadows")
     shadow.add_argument("--apply", action="store_true", help="Publish only the isolated shadow output")
+
+    approve = commands.add_parser("pilot-approve", help="Preview or publish one artifact-bound approval and ACTIVE lock")
+    approve.add_argument("--manifest", type=Path, required=True)
+    approve.add_argument("--evidence", type=Path, required=True)
+    approve.add_argument("--host-id", required=True)
+    approve.add_argument("--decision-id", required=True)
+    approve.add_argument("--requested-by", required=True)
+    approve.add_argument("--requested-at", required=True)
+    approve.add_argument("--decided-by", required=True)
+    approve.add_argument("--decided-at", required=True)
+    approve.add_argument("--expires-at", required=True)
+    approve.add_argument("--reason", required=True)
+    approve.add_argument("--apply", action="store_true")
+
+    activate = commands.add_parser("pilot-activate", help="Preview or apply one approved temporary activation")
+    activate.add_argument("--manifest", type=Path, required=True)
+    activate.add_argument("--evidence", type=Path, required=True)
+    activate.add_argument("--repository", type=Path, required=True)
+    activate.add_argument("--decision-id", required=True)
+    activate.add_argument("--transaction-id", required=True)
+    activate.add_argument("--started-at", required=True)
+    activate.add_argument("--evaluated-at", required=True)
+    activate.add_argument("--executed-by", required=True)
+    activate.add_argument("--expected-registry-sha256", required=True)
+    activate.add_argument("--expected-baseline-sha256", required=True)
+    activate.add_argument("--apply", action="store_true")
+
+    pilot_verify = commands.add_parser("pilot-verify", help="Preview or execute one transaction-bound probe plan")
+    pilot_verify.add_argument("--transaction-id", required=True)
+    pilot_verify.add_argument("--probe-plan", type=Path, required=True)
+    pilot_verify.add_argument("--apply", action="store_true")
+
+    rollback = commands.add_parser("pilot-rollback", help="Preview or roll back one durable pilot transaction")
+    rollback.add_argument("--transaction-id", required=True)
+    rollback.add_argument("--decision-id", required=True, help="New superseding revocation decision ID")
+    rollback.add_argument("--decided-by", required=True)
+    rollback.add_argument("--decided-at", required=True)
+    rollback.add_argument("--reason", required=True)
+    rollback.add_argument("--apply", action="store_true")
+
     health_parser = commands.add_parser("health", help="Compare frozen local evidence without writes or fetch")
     health_parser.add_argument("--project-root", type=Path)
     return root
@@ -139,6 +180,45 @@ def execute(arguments: argparse.Namespace, host: HostLayout) -> dict[str, Any]:
     if arguments.command == "shadow":
         shadow_arguments = (host, arguments.registry_path, arguments.source_set, arguments.output_root)
         return write_shadow(*shadow_arguments) if arguments.apply else preview_shadow(*shadow_arguments)
+    if arguments.command == "pilot-approve":
+        request = {
+            "manifestPath": arguments.manifest,
+            "evidencePath": arguments.evidence,
+            "hostID": arguments.host_id,
+            "decisionID": arguments.decision_id,
+            "requestedBy": arguments.requested_by,
+            "requestedAt": arguments.requested_at,
+            "decidedBy": arguments.decided_by,
+            "decidedAt": arguments.decided_at,
+            "expiresAt": arguments.expires_at,
+            "reason": arguments.reason,
+        }
+        return approve_pilot(host, request, arguments.apply)
+    if arguments.command == "pilot-activate":
+        request = {
+            "manifestPath": arguments.manifest,
+            "evidencePath": arguments.evidence,
+            "repositoryPath": arguments.repository,
+            "decisionID": arguments.decision_id,
+            "transactionID": arguments.transaction_id,
+            "startedAt": arguments.started_at,
+            "evaluatedAt": arguments.evaluated_at,
+            "executedBy": arguments.executed_by,
+            "expectedRegistrySHA256": arguments.expected_registry_sha256,
+            "expectedBaselineSHA256": arguments.expected_baseline_sha256,
+        }
+        return activate_pilot(host, request, arguments.apply)
+    if arguments.command == "pilot-verify":
+        return verify_pilot(host, arguments.transaction_id, arguments.probe_plan, arguments.apply)
+    if arguments.command == "pilot-rollback":
+        request = {
+            "transactionID": arguments.transaction_id,
+            "decisionID": arguments.decision_id,
+            "decidedBy": arguments.decided_by,
+            "decidedAt": arguments.decided_at,
+            "reason": arguments.reason,
+        }
+        return rollback_pilot(host, request, arguments.apply)
     return health(host, arguments.project_root)
 
 

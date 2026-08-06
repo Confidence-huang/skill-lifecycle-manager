@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "documentType": "PILOT_PROBE_PLAN",
+  "artifactID": "sha256:f29bbec144b0e75514b6f0b7f22842bbcd9428d7e0087f50d0b812f02d0c6b2e",
+  "skillName": "oil-tone",
+  "timeoutSeconds": 120,
+  "probes": [
+    {
+      "name": "official-skill-validator",
+      "command": [
+        "/usr/bin/python3",
+        "/home/a/.codex/skills/.system/skill-creator/scripts/quick_validate.py",
+        "${SKILL_ROOT}"
+      ],
+      "stdin": null,
+      "expectedExitCode": 0,
+      "stdoutContains": [
+        "Skill is valid!"
+      ]
+    },
+    {
+      "name": "tone-lint-self-test",
+      "command": [
+        "/usr/bin/python3",
+        "${SKILL_ROOT}/scripts/tone_lint.py",
+        "--self-test"
+      ],
+      "stdin": null,
+      "expectedExitCode": 0,
+      "stdoutContains": [
+        "PASS  tone lint self-test"
+      ]
+    },
+    {
+      "name": "neutral-copy-positive",
+      "command": [
+        "/usr/bin/python3",
+        "${SKILL_ROOT}/scripts/tone_lint.py",
+        "-"
+      ],
+      "stdin": "这是一份平实、准确并且结构完整的说明。\n",
+      "expectedExitCode": 0,
+      "stdoutContains": [
+        "PASS  no known oil-tone failures"
+      ]
+    },
+    {
+      "name": "prohibited-ending-negative",
+      "command": [
+        "/usr/bin/python3",
+        "${SKILL_ROOT}/scripts/tone_lint.py",
+        "-"
+      ],
+      "stdin": "真正重要的是，我们理解了工具的边界。\n",
+      "expectedExitCode": 1,
+      "stdoutContains": [
+        "删除没有增加信息的总结或升华表达。"
+      ]
+    }
+  ]
+}

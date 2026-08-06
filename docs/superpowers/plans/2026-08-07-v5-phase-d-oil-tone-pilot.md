@@ -192,6 +192,10 @@ On apply, persist `IN_PROGRESS` before the first mutation and stop on any identi
 
 After activation, require all of the following:
 
+Use the committed artifact-bound plan
+`docs/superpowers/plans/2026-08-07-v5-phase-d-oil-tone-probe-plan.json`; do not reconstruct its
+commands at the shell prompt.
+
 1. the activity path is exactly one symbolic link to the frozen Skill directory;
 2. Registry generation records exactly one `oil-tone` asset with SOURCE/USER/PASS and the exact
    repository, commit, Skill path, and activity path;

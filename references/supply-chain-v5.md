@@ -94,3 +94,27 @@ apply calls remain separate. The durable transaction file is retained as evidenc
 Phase C passing only opens review of Phase D. It does not authorize a real capability lock,
 decision journal, transaction journal, activity switch, Registry migration, baseline change, or a
 pilot using `skill-lifecycle-manager` itself.
+
+## Phase D reviewed pilot contract
+
+Phase D is a bounded transaction interface for one artifact that already passed Phase B provenance
+and explicit user selection. It does not infer approval from Registry presence or a matching source.
+
+- `pilot-approve` previews or appends one Schema-valid approval decision and publishes a matching
+  ACTIVE lock revision. Every revision is retained immutably before the current lock advances;
+  exact retries are idempotent.
+- `pilot-activate` rechecks the full committed Git tree, remote, commit, Skill path, approval, lock,
+  Registry hash and baseline hash. It persists four exact observed-state preimages and an
+  `IN_PROGRESS` event before creating one activity link.
+- Registry JSON/YAML and both reports are generated from one live scan. Every pre-existing Registry
+  record must remain equal; the new record must preserve the approved source identity.
+- `pilot-verify` accepts one artifact-bound, Schema-valid argument-array plan. It never invokes a
+  shell, bounds runtime and captured output, and retains the plan, result and transaction event.
+- `pilot-rollback` accepts only the durable transaction. It removes the declared link when present,
+  restores all four exact preimages, appends a superseding revocation, publishes an INACTIVE lock,
+  and retains a Schema-valid `ROLLED_BACK` event. Exact completed retries write nothing.
+
+The stable baseline is a canary during a temporary pilot. Expected inventory drift after activation
+must not be hidden with rebaseline. The pilot passes only after rollback restores the original
+Registry/report hashes and formal health returns to PASS. V5 decisions, locks, transactions and probe
+evidence remain audit state beside Registry v1; they never become a second observed Registry.

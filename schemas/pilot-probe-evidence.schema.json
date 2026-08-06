@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skill-lifecycle-manager.local/schemas/v5/pilot-probe-evidence.schema.json",
+  "title": "Transaction-bound pilot probe evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "documentType", "transactionID", "artifactID", "planSHA256", "status", "results"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "documentType": {"const": "PILOT_PROBE_EVIDENCE"},
+    "transactionID": {"$ref": "common.schema.json#/$defs/transactionID"},
+    "artifactID": {"$ref": "common.schema.json#/$defs/artifactID"},
+    "planSHA256": {"$ref": "common.schema.json#/$defs/sha256"},
+    "status": {"enum": ["PASS", "BLOCKED"]},
+    "results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status", "exitCode", "expectedExitCode", "missingOutput", "output"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1, "maxLength": 128},
+          "status": {"enum": ["PASS", "BLOCKED"]},
+          "exitCode": {"type": "integer"},
+          "expectedExitCode": {"type": "integer", "minimum": 0, "maximum": 255},
+          "missingOutput": {
+            "type": "array",
+            "items": {"type": "string", "maxLength": 2048}
+          },
+          "output": {"type": "string", "maxLength": 8000}
+        }
+      }
+    }
+  }
+}

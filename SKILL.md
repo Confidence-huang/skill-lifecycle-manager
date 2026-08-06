@@ -159,6 +159,29 @@ authorize a real pilot; Phase D still requires a separately approved non-manager
 rollback, baseline, and after-scan plan. Read
 [references/supply-chain-v5.md](references/supply-chain-v5.md).
 
+## V5 Phase D reviewed pilot candidate
+
+Phase D exposes four reviewed commands for one explicitly authorized non-manager pilot:
+
+```bash
+skill pilot-approve --manifest /exact/manifest.json --evidence /exact/evidence.json ...
+skill pilot-activate --manifest /exact/manifest.json --evidence /exact/evidence.json ...
+skill pilot-verify --transaction-id transaction-... --probe-plan /exact/probe-plan.json ...
+skill pilot-rollback --transaction-id transaction-... --decision-id decision-... ...
+```
+
+Every command previews by default and requires `--apply` to write. Approval appends one exact
+artifact/evidence-bound decision and publishes an ACTIVE lock revision plus immutable revision history. Activation persists exact
+Registry/report preimages plus an `IN_PROGRESS` event before creating one symbolic link. Verification
+runs one Schema-valid no-shell argument-array plan and retains bounded output. Rollback consumes only
+the durable transaction, restores the four exact preimages, appends a superseding revocation, and
+publishes an INACTIVE lock revision.
+
+The first reviewed run is temporary: it must end inactive with the existing baseline unchanged and
+formal health restored. These commands do not authorize persistent adoption, another Skill, a
+manager self-pilot, rebaseline, source relocation, or direct hand-written state repair. Read
+[docs/superpowers/plans/2026-08-07-v5-phase-d-oil-tone-pilot.md](docs/superpowers/plans/2026-08-07-v5-phase-d-oil-tone-pilot.md).
+
 ## Completion checks
 
 After any implementation or environment change:

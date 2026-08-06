@@ -73,6 +73,31 @@ class HostLayout:
         """Return the directory for bounded targeted verification evidence."""
         return self.state_root / "verification"
 
+    @property
+    def v5_root(self) -> Path:
+        """Return the audit-only V5 state root beside, but never replacing, Registry v1."""
+        return self.state_root / "v5"
+
+    @property
+    def decision_journal_path(self) -> Path:
+        """Return the append-only artifact approval journal path."""
+        return self.v5_root / "decisions.jsonl"
+
+    @property
+    def capability_lock_path(self) -> Path:
+        """Return the current host-local desired-state lock path."""
+        return self.v5_root / "capability-lock.json"
+
+    @property
+    def capability_lock_history_root(self) -> Path:
+        """Return the immutable per-revision lock history used by transaction audits."""
+        return self.v5_root / "locks"
+
+    @property
+    def transaction_root(self) -> Path:
+        """Return the parent that owns immutable event directories for applied transactions."""
+        return self.v5_root / "transactions"
+
 
 def sha256_file(path: Path) -> str:
     """Hash one physical file in bounded blocks and return uppercase evidence."""
@@ -98,3 +123,11 @@ def atomic_text(path: Path, text: str) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(text, encoding="utf-8")  # Persist exactly one normalized UTF-8 document.
     temporary.replace(path)  # Never expose a partially generated Markdown or YAML mirror.
+
+
+def atomic_bytes(path: Path, payload: bytes) -> None:
+    """Restore one exact preimage through a same-directory atomic rename."""
+    path.parent.mkdir(parents=True, exist_ok=True)  # The transaction already declared this owner root.
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_bytes(payload)  # Byte restoration preserves the frozen Registry/report identity.
+    temporary.replace(path)  # Readers see a complete old or restored file, never partial bytes.
