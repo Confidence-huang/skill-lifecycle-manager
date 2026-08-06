@@ -18,6 +18,7 @@ import json  # Serialize one canonical, whitespace-free JSON representation.
 import re  # Reject malformed commits, hashes, and host-specific absolute paths.
 import unicodedata  # Normalize equivalent Unicode path spellings before identity hashing.
 from collections.abc import Iterable, Mapping  # Accept explicit read-only structured inputs.
+from datetime import datetime  # Compare approval expiry and superseding decisions in one timezone.
 from pathlib import PurePosixPath  # Express portable Skill-relative paths without touching disk.
 from typing import Any  # Preserve the visible JSON field structure at the module boundary.
 
@@ -179,3 +180,54 @@ def encode_json_line(record: Mapping[str, Any]) -> str:
     if "\n" in encoded or "\r" in encoded:  # Compact JSON must escape embedded user newlines.
         raise ContractBlocked("Canonical JSON Lines records cannot contain literal line breaks.")
     return encoded + "\n"
+
+
+# --- Parse one contract timestamp without accepting host-local time ---
+def parse_timestamp(value: Any) -> datetime:
+    """Return one timezone-aware timestamp used to compare approval records deterministically."""
+    if not isinstance(value, str) or not value:  # Missing time cannot establish current approval.
+        raise ContractBlocked("Approval timestamp must be a non-empty string.")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))  # JSON fixtures use the UTC Z suffix.
+    except ValueError as error:
+        raise ContractBlocked(f"Approval timestamp is invalid: {value}") from error
+    if parsed.tzinfo is None:  # Host-local timestamps would make expiry depend on the machine timezone.
+        raise ContractBlocked(f"Approval timestamp must include a timezone: {value}")
+    return parsed
+
+
+# --- Resolve one artifact-bound approval without mutating state ---
+def require_current_approval(
+    decisions: Iterable[Mapping[str, Any]],
+    decision_id: str,
+    artifact_id: str,
+    evaluated_at: str,
+) -> dict[str, Any]:
+    """Return one effective approval or block stale, expired, revoked, and mismatched decisions."""
+    records = [dict(record) for record in decisions]  # Freeze the caller's append-only view for one check.
+    matches = [record for record in records if record.get("decisionID") == decision_id]
+    if len(matches) != 1:  # Missing or duplicate IDs cannot authorize a mutation.
+        raise ContractBlocked(f"Expected one approval decision {decision_id}, found {len(matches)}.")
+
+    selected = matches[0]  # The exact referenced record is the only candidate authority.
+    if selected.get("decision") != "APPROVED":  # Rejection, revocation, and expiry never grant access.
+        raise ContractBlocked(f"Decision is not an approval: {decision_id}")
+    if selected.get("artifactID") != artifact_id:  # Content changes require a new artifact-bound decision.
+        raise ContractBlocked(f"Approval does not match artifact: {artifact_id}")
+    if not selected.get("evidenceRefs"):  # The Phase A Schema also requires evidence for approval.
+        raise ContractBlocked(f"Approval has no evidence references: {decision_id}")
+
+    now = parse_timestamp(evaluated_at)  # One explicit evaluation time avoids clock reads in pure tests.
+    expires_at = selected.get("expiresAt")
+    if expires_at is not None and parse_timestamp(expires_at) <= now:
+        raise ContractBlocked(f"Approval is expired: {decision_id}")
+
+    superseding = [
+        record
+        for record in records
+        if record.get("supersedesDecisionID") == decision_id
+        and record.get("decision") in {"REVOKED", "EXPIRED"}
+    ]  # A later terminal decision invalidates the referenced approval without rewriting its record.
+    if superseding:
+        raise ContractBlocked(f"Approval has been superseded: {decision_id}")
+    return selected

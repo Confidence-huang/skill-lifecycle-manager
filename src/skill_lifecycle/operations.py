@@ -154,7 +154,7 @@ def install_skill(layout: HostLayout, source: str, mode: str = "auto", skill_pat
             if verification["status"] != "PASS":
                 raise LifecycleBlocked(f"Install verification blocked: {verification.get('reportPath')}")
             registry = write_registry(layout, [layout.activity_root])  # Publish only after activation and probes pass.
-        except Exception:
+        except BaseException:  # Interruption-style failures still clean only paths created above.
             if created_activity and created_activity.is_symlink():
                 created_activity.unlink()  # Remove only this transaction's activation alias.
             if created_destination and created_destination.exists():
@@ -237,7 +237,14 @@ def update_skill(layout: HostLayout, name: str, apply: bool) -> dict[str, Any]:
     fast_forward = run_git(repository, "merge", "--ff-only", candidate)
     if fast_forward.returncode:
         raise LifecycleBlocked(f"Fast-forward failed: {fast_forward.stderr.strip()}")
-    registry = write_registry(layout, [layout.activity_root])
+    try:
+        registry = write_registry(layout, [layout.activity_root])  # Registry publication remains the final mutation.
+    except BaseException as error:
+        rollback = run_git(repository, "reset", "--hard", current)  # The preflight clean commit is the exact rollback point.
+        if rollback.returncode:
+            detail = rollback.stderr.strip() or rollback.stdout.strip()
+            raise LifecycleBlocked(f"Registry publication failed and update rollback failed: {detail}") from error
+        raise
     return {**preview, "action": "UPDATED", "current": candidate, "registryPath": registry["registryPath"], "mutations": registry["mutations"] + 1}
 
 
