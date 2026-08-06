@@ -306,10 +306,12 @@ class PhaseDPilotTests(unittest.TestCase):
             plan = write_probe_plan(root, fixture["artifactID"], passes=False)
             verification = verify_pilot(host, TRANSACTION_ID, plan, True)
             evidence_path = host.transaction_root / TRANSACTION_ID / "probe-evidence.json"
+            retained_evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
             rollback_pilot(host, fixture["rollback"], True)
             after = {name: path.read_bytes() for name, path in formal_paths(host).items()}
         self.assertEqual(verification["status"], "BLOCKED")
-        self.assertTrue(evidence_path.is_file())
+        self.assertEqual(retained_evidence["status"], "BLOCKED")
+        self.assert_document_valid("pilot-probe-evidence.schema.json", retained_evidence)
         self.assertEqual(after, before)
 
     # --- Validate one durable document through the offline Schema registry ---
