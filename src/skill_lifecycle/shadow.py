@@ -36,7 +36,7 @@ LOWER_SHA256 = re.compile(r"^[0-9a-f]{64}$")  # Frozen input hashes use one cano
 HOST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")  # Match the shared Schema's host identifier.
 SKILL_NAME = re.compile(r"^name:\s*(.+?)\s*$", re.MULTILINE)  # Frontmatter owns the public name.
 LFS_HEADER = b"version https://git-lfs.github.com/spec/v1\n"  # Pointer bytes are not full content.
-V4_OBSERVED_FIELDS = (
+OBSERVED_FIELDS = (
     "status",
     "scope",
     "lifecycleMode",
@@ -51,7 +51,9 @@ V4_OBSERVED_FIELDS = (
     "isTopLevel",
     "skillSHA256",
     "sourceDirty",
-)  # Preserve every V4 identity and status fact needed to detect loss in the shadow projection.
+    "lifecycleSHA256",
+    "updates",
+)  # Preserve the complete 4.1 identity, status, package provenance, and freshness view without rewriting it.
 
 
 @dataclass(frozen=True)
@@ -278,13 +280,13 @@ def validate_source(source: dict[str, Any]) -> tuple[Path, str, str]:
     return repository, skill_path, expected_commit
 
 
-# --- Preserve the V4 observed facts needed for loss detection ---
+# --- Preserve the current host Registry facts needed for loss detection ---
 def observed_state(record: dict[str, Any]) -> dict[str, Any]:
-    """Project one Registry record without dropping identity, activation, or status evidence."""
-    missing = [field for field in V4_OBSERVED_FIELDS if field not in record]
+    """Project one Registry record without dropping identity, activation, provenance, or freshness evidence."""
+    missing = [field for field in OBSERVED_FIELDS if field not in record]
     if missing:
-        raise LifecycleBlocked(f"Registry record loses required V4 fields: {record.get('name')}: {missing}")
-    return {field: record[field] for field in V4_OBSERVED_FIELDS}
+        raise LifecycleBlocked(f"Registry record loses required observed fields: {record.get('name')}: {missing}")
+    return {field: record[field] for field in OBSERVED_FIELDS}
 
 
 # --- Compare one pinned source with Registry v1 ---

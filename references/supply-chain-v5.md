@@ -58,8 +58,12 @@ manifests, provenance evidence, a host-local comparison report, and lock candida
 decision and no valid capability lock: every candidate has `approvalDecisionID: null` and
 `eligibility: BLOCKED_MISSING_APPROVAL`.
 
+For a 4.1 Registry, the shadow projection also preserves `lifecycleSHA256` and the normalized
+`updates` freshness contract. Shadow generation never executes that contract and never fetches
+release data; the fields remain observed host evidence only.
+
 An active Registry record without a real lock is reported as `UNMANAGED`, even when its observed
 source facts match the pinned artifact. A reviewed-only source that remains absent is
 `NOT_EVALUATED`; absence alone is not approval or convergence. Any name collision, physical-path
-misclassification, commit/lifecycle mismatch, dirty source, missing V4 field, LFS pointer, or
+misclassification, commit/lifecycle mismatch, dirty source, missing required Registry field, LFS pointer, or
 submodule stops the complete shadow run before publication.

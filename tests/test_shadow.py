@@ -13,9 +13,10 @@ from jsonschema import Draft202012Validator, FormatChecker  # Validate every gen
 
 from skill_lifecycle.paths import HostLayout, LifecycleBlocked  # Assert the established stop gate.
 from skill_lifecycle.shadow import (  # Exercise preview, publication, and pure document generation.
-    V4_OBSERVED_FIELDS,
+    OBSERVED_FIELDS,
     build_shadow_bundle,
     document_bytes,
+    observed_state,
     preview_shadow,
     write_shadow,
 )
@@ -70,7 +71,7 @@ def create_source(repository: Path, name: str, remote: str, skill_path: str = ".
 
 
 def registry_record(source: dict, lifecycle_mode: str = "SOURCE") -> dict:
-    """Return the complete V4 observed-state subset required by the shadow projection."""
+    """Return the complete 4.1 observed-state subset required by the shadow projection."""
     skill_file = source["skillRoot"] / "SKILL.md"
     return {
         "name": source["name"],
@@ -92,6 +93,8 @@ def registry_record(source: dict, lifecycle_mode: str = "SOURCE") -> dict:
         "capabilityEvidence": ["synthetic fixture"],
         "skillSHA256": hashlib.sha256(skill_file.read_bytes()).hexdigest().upper(),
         "sourceDirty": False,
+        "lifecycleSHA256": None,
+        "updates": None,
     }
 
 
@@ -154,7 +157,7 @@ class ShadowTests(unittest.TestCase):
         """Write one frozen Registry v1 input without invoking live inventory code."""
         payload = {
             "schemaVersion": 1,
-            "generator": "skill-lifecycle-manager/4.0.0",
+            "generator": "skill-lifecycle-manager/4.1.0",
             "generatedAt": "2026-08-07T00:30:00+08:00",
             "platform": "synthetic",
             "roots": [str(self.root / "activity")],
@@ -200,8 +203,8 @@ class ShadowTests(unittest.TestCase):
         self.assertEqual(errors, [], "\n".join(error.message for error in errors))
 
     # --- Preview every Phase B document without creating output ---
-    def test_preview_is_zero_write_and_preserves_v4_observed_state(self) -> None:
-        """Keep Registry/source bytes stable while retaining the complete required V4 status subset."""
+    def test_preview_is_zero_write_and_preserves_41_observed_state(self) -> None:
+        """Keep Registry/source bytes stable while retaining the complete required 4.1 observed subset."""
         registry_before = hashlib.sha256(self.registry_path.read_bytes()).hexdigest()
         active_status_before = git(self.active["repository"], "status", "--porcelain=v1")
         bundle = build_shadow_bundle(self.registry_path, self.source_set_path)
@@ -217,8 +220,8 @@ class ShadowTests(unittest.TestCase):
         active_record = next(record for record in report["records"] if record["name"] == "active-skill")
         reviewed_record = next(record for record in report["records"] if record["name"] == "reviewed-skill")
         expected_observed = {
-            field: registry_record(self.active)[field] for field in V4_OBSERVED_FIELDS
-        }  # Exact equality proves the projection did not silently drop or rewrite required V4 facts.
+            field: registry_record(self.active)[field] for field in OBSERVED_FIELDS
+        }  # Exact equality proves the projection did not silently drop or rewrite required 4.1 facts.
         self.assertEqual(active_record["observedState"], expected_observed)
         self.assertEqual(active_record["convergenceStatus"], "UNMANAGED")
         self.assertIsNone(reviewed_record["observedState"])
@@ -230,6 +233,7 @@ class ShadowTests(unittest.TestCase):
                 self.assertEqual(evidence["reportPath"], "shadow-report.json")
         lock_candidates = bundle.documents["lock-candidates.json"]
         self.assertTrue(lock_candidates["entries"])
+
         self.assertTrue(all(entry["approvalDecisionID"] is None for entry in lock_candidates["entries"]))
         self.assertTrue(all(entry["eligibility"] == "BLOCKED_MISSING_APPROVAL" for entry in lock_candidates["entries"]))
         for path, payload in bundle.documents.items():
@@ -246,6 +250,23 @@ class ShadowTests(unittest.TestCase):
             ).iter_errors(source_set)
         )
         self.assertEqual(source_errors, [])
+
+    def test_observed_state_preserves_non_null_freshness_contract(self) -> None:
+        """Retain normalized PACKAGE release evidence as data without executing its command contract."""
+        package_record = registry_record(self.active, lifecycle_mode="PACKAGE")
+        package_record["lifecycleSHA256"] = "A" * 64
+        package_record["updates"] = {
+            "strategy": "git-tags",
+            "repository": "https://example.invalid/active-skill.git",
+            "tagPrefix": "v",
+            "baselineVersion": "1.2.3",
+            "cli": {"command": "active-skill", "arguments": ["version"]},
+        }
+
+        projected = observed_state(package_record)
+
+        self.assertEqual(projected["lifecycleSHA256"], "A" * 64)
+        self.assertEqual(projected["updates"], package_record["updates"])
 
     # --- Publish only a new isolated tree and refuse overwrite ---
     def test_apply_publishes_exact_shadow_documents_once(self) -> None:

@@ -126,7 +126,9 @@
                   "issues",
                   "isTopLevel",
                   "skillSHA256",
-                  "sourceDirty"
+                  "sourceDirty",
+                  "lifecycleSHA256",
+                  "updates"
                 ],
                 "properties": {
                   "status": {"enum": ["PASS", "BLOCKED", "UNKNOWN"]},
@@ -142,7 +144,43 @@
                   "issues": {"type": "array", "items": {"type": "string"}},
                   "isTopLevel": {"type": "boolean"},
                   "skillSHA256": {"type": "string", "pattern": "^[0-9A-Fa-f]{64}$"},
-                  "sourceDirty": {"type": ["boolean", "null"]}
+                  "sourceDirty": {"type": ["boolean", "null"]},
+                  "lifecycleSHA256": {
+                    "oneOf": [
+                      {"type": "null"},
+                      {"type": "string", "pattern": "^[0-9A-Fa-f]{64}$"}
+                    ]
+                  },
+                  "updates": {
+                    "oneOf": [
+                      {"type": "null"},
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["strategy", "repository", "tagPrefix", "baselineVersion", "cli"],
+                        "properties": {
+                          "strategy": {"const": "git-tags"},
+                          "repository": {"type": "string", "minLength": 1},
+                          "tagPrefix": {"type": "string", "maxLength": 64},
+                          "baselineVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+                          "cli": {
+                            "oneOf": [
+                              {"type": "null"},
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": ["command", "arguments"],
+                                "properties": {
+                                  "command": {"type": "string", "minLength": 1},
+                                  "arguments": {"type": "array", "items": {"type": "string"}}
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
                 }
               }
             ]
