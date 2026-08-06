@@ -15,10 +15,10 @@ from jsonschema import Draft202012Validator, FormatChecker  # Validate every dur
 
 from skill_lifecycle.contracts import build_artifact_identity, compute_artifact_id, compute_tree_sha256
 from skill_lifecycle.inventory import governance_result
-from skill_lifecycle.paths import LifecycleBlocked, sha256_file
+from skill_lifecycle.paths import HostLayout, LifecycleBlocked, sha256_file
 from skill_lifecycle.pilot import activate_pilot, approve_pilot, read_decisions, rollback_pilot, verify_pilot
 from skill_lifecycle.shadow import committed_tree_entries
-from support import create_git_skill, create_skill, layout
+from support import create_git_skill, create_skill
 from test_contracts import load_schemas
 
 
@@ -100,7 +100,13 @@ class PhaseDPilotTests(unittest.TestCase):
     # --- Prepare one host whose formal four-file state is already healthy and frozen ---
     def fixture(self, root: Path, *, apply_approval: bool = True) -> dict:
         """Return all exact request inputs while keeping the pilot source outside activity."""
-        host = layout(root / "host")
+        host_root = root / "host"
+        host = HostLayout(
+            host_root / ".agents/skills",
+            host_root / "data",
+            host_root / "state",
+            host_root / "cache",
+        )  # The USER-scope assertion must exercise the same path shape as the frozen Ubuntu runbook.
         create_skill(host.activity_root / "canary", "canary")
         governance_result(host, True)
         host.baseline_path.write_text('{"frozen":true}\n', encoding="utf-8")
