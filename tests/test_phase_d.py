@@ -207,6 +207,7 @@ class PhaseDPilotTests(unittest.TestCase):
                 read_transaction(host, "transaction-start.json"),
                 read_transaction(host, "transaction-activated.json"),
                 read_transaction(host, "transaction-verified.json"),
+                read_transaction(host, "transaction-rollback-start.json"),
                 read_transaction(host, "transaction-rollback.json"),
             ]
             decisions = read_decisions(host)
@@ -228,6 +229,7 @@ class PhaseDPilotTests(unittest.TestCase):
         for lock_revision in lock_revisions:
             self.assert_document_valid("capability-lock.schema.json", lock_revision)
         self.assertEqual([item["decision"] for item in decisions], ["APPROVED", "REVOKED"])
+        self.assertIsNone(transactions[3]["endedAt"])
         for transaction in transactions:
             self.assert_document_valid("transaction.schema.json", transaction)
 

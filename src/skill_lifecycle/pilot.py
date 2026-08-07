@@ -811,7 +811,7 @@ def rollback_preview(host: HostLayout, request: dict[str, Any]) -> dict[str, Any
         "approvalDecisionID": revocation["decisionID"],
         "beforeArtifactID": started["afterArtifactID"],
         "afterArtifactID": None,
-        "endedAt": request["decidedAt"],
+        "endedAt": None,  # An IN_PROGRESS event has no completion time under the frozen Schema.
         "executedBy": request["decidedBy"],
         "steps": [
             {"name": "remove-activity", "status": "PENDING", "detail": "Remove only the declared pilot link."},
@@ -851,6 +851,7 @@ def rollback_pilot(host: HostLayout, request: dict[str, Any], apply: bool) -> di
     lock_mutations = publish_lock(host, preview["lock"])
     rollback = {
         **preview["transaction"],
+        "endedAt": request["decidedAt"],  # Only the terminal event records when rollback completed.
         "steps": [
             {"name": "remove-activity", "status": "PASS", "detail": "Removed only the declared pilot link."},
             {"name": "restore-state", "status": "PASS", "detail": "Restored four exact preimages."},
