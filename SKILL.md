@@ -27,6 +27,8 @@ The normal Ubuntu entrypoint is the Python 3.12 `skill` command installed from t
 12. Health is always read-only and never fetches, installs, updates, deletes, grades, or routes.
 13. Shadow generation reads a frozen Registry and exact Git commits; it may write only a new child
     below `data-root/shadows` after `--apply`, and it never creates approval or authoritative lock state.
+14. Manager promotion requires one exact Schema-valid plan, previews by default, runs offline, and
+    may inject failures only beneath a declared disposable REHEARSAL sandbox.
 
 ## Command entry
 
@@ -40,8 +42,9 @@ uv run skill --help
 After the reviewed checkout passes acceptance, publish the user-level command:
 
 ```bash
-./bootstrap.sh
+./bootstrap.sh install
 skill --help
+skill --version
 ```
 
 ## Inventory, Registry, and reports
@@ -181,6 +184,25 @@ The first reviewed run is temporary: it must end inactive with the existing base
 formal health restored. These commands do not authorize persistent adoption, another Skill, a
 manager self-pilot, rebaseline, source relocation, or direct hand-written state repair. Read
 [docs/superpowers/plans/2026-08-07-v5-phase-d-oil-tone-pilot.md](docs/superpowers/plans/2026-08-07-v5-phase-d-oil-tone-pilot.md).
+
+## V5 manager promotion candidate
+
+```bash
+skill --version
+skill manager-upgrade --plan /exact/manager-promotion-plan.json
+skill manager-upgrade --plan /exact/manager-promotion-plan.json --apply
+skill manager-rehearse --plan /disposable/manager-promotion-plan.json \
+  --failure-point after-cli-publication --apply
+```
+
+The plan pins both full commits, clean candidate source, offline carrier SHA256, formal source and
+activity paths, absolute uv/CLI/tool/receipt paths, all five state preimage hashes, and the expected
+inventory count. FORMAL apply captures recovery evidence before publication, performs the exact
+source/CLI/Registry/baseline sequence, and accepts only structured identity plus health `PASS` with
+`mutations: 0`. Any failure restores the old source, uv receipt/tool, four generated views, baseline
+bytes and activity resolution before running old-manager health. Exact successful retries write
+nothing. Read
+[docs/superpowers/plans/2026-08-07-v5-formal-promotion-readiness-and-rollback.md](docs/superpowers/plans/2026-08-07-v5-formal-promotion-readiness-and-rollback.md).
 
 ## Completion checks
 

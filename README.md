@@ -10,6 +10,7 @@ PowerShell from the normal Linux runtime.
 uv sync --frozen
 uv run python -m unittest discover -s tests -v
 uv run skill --help
+uv run skill --version
 uv build
 ```
 
@@ -28,6 +29,8 @@ skill backup --path PATH [--path PATH ...] [--apply]
 skill restore --backup-path PATH --destination PATH [--apply]
 skill stabilize [--apply] [--archive-existing]
 skill shadow --registry-path PATH --source-set PATH --output-root PATH [--apply]
+skill manager-upgrade --plan PATH [--apply]
+skill manager-rehearse --plan PATH --failure-point POINT [--apply]
 skill health [--project-root PATH]
 ```
 
@@ -35,8 +38,10 @@ skill health [--project-root PATH]
 stable Git tags, and probes an optional companion CLI. It never fetches, installs, upgrades, writes
 state, or invokes GitHub CLI. `skill update --apply` remains the separate SOURCE/HYBRID mutation.
 
-Run `./bootstrap.sh` only after the checkout is clean and acceptance passes. It installs the reviewed
-checkout as the user-level `skill` command through `uv tool install --editable`.
+`./bootstrap.sh install` is the fresh-install entry. `./bootstrap.sh upgrade --plan PATH [--apply]`
+is the distinct offline manager-promotion entry; it delegates to the exact plan, preserves the prior
+uv receipt and state preimages, and uses `uv tool install --offline --force --editable` only after
+preview passes. A completed exact retry is zero-write.
 
 ## V5 Phase A contract candidate
 
@@ -50,6 +55,20 @@ uv run python -m unittest tests.test_contracts -v
 
 Phase A is not CLI activation. It does not create a lock, approval, evidence report, transaction,
 Registry migration, or baseline. Read `references/supply-chain-v5.md` before extending this candidate.
+
+## V5 manager promotion candidate
+
+`skill --version` reports package version, full source commit, Git tree, deterministic identity
+SHA256, source path/cleanliness, and `mutations: 0`. A manager promotion plan pins old/new commits,
+candidate source, carrier path/SHA256, formal source/activity/CLI, uv tool roots/receipt, five state
+preimages, and the expected inventory count.
+
+`skill manager-upgrade` previews by default. Applied FORMAL promotion captures recovery material,
+publishes the source and CLI offline, regenerates the four observed-state views, archives/replaces
+the baseline once, and requires final health `PASS` with zero mutations. `manager-rehearse` accepts
+failure injection only for a REHEARSAL plan whose mutable paths remain below one sandbox root.
+Rollback restores the old commit, receipt, views, baseline, activity resolution, and old health
+while retaining failure evidence and any baseline-history artifact.
 
 ## V5 Phase B shadow candidate
 

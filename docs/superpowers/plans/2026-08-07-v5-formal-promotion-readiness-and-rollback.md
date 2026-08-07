@@ -1,6 +1,6 @@
 # V5 formal promotion readiness and rollback runbook
 
-Status: `REVIEWED_HOLD_NOT_AUTHORIZED`
+Status: `P0_IMPLEMENTED_EXACT_ARTIFACT_AND_APPLY_AUTHORIZATION_PENDING`
 
 This runbook freezes the evidence, stop gates, mutation order, and rollback obligations for a
 possible future promotion of the inactive V5 candidate. It does not authorize a formal manager
@@ -9,9 +9,10 @@ another `oil-tone` activation.
 
 ## Outcome
 
-The Phase D rollback serialization fix is accepted as an inactive code candidate. Formal promotion
-is on hold until the release-identity, upgrade-entry, and isolated manager-rollback gates below are
-implemented and independently verified.
+The Phase D rollback serialization fix remains accepted. The inactive successor now implements the
+release-identity, offline upgrade-entry, and isolated manager-rollback gates below. Formal promotion
+remains on hold until full acceptance produces the final successor commit and carrier SHA256, and a
+new external promotion plan explicitly binds those post-commit identities to the formal mutation.
 
 The candidate fixes future `transaction-rollback-start.json` events. Promotion cannot make the two
 already retained invalid events valid, and those files must never be rewritten or presented as a
@@ -71,7 +72,8 @@ after future code promotion. New disposable fixtures must prove the fixed serial
 
 ## Apply blockers
 
-Formal promotion must stop until all three blockers are closed in a new inactive successor commit.
+These three blockers are the frozen acceptance criteria. Successor code now implements them, but
+formal promotion still stops until its final clean commit, carrier and external plan pass acceptance.
 
 ### 1. Release identity is ambiguous
 
@@ -132,6 +134,28 @@ successful test run, or approval to modify the inactive candidate is insufficien
 It must still forbid network access, unrelated package updates, another Skill activation,
 `oil-tone` persistence, history rewriting outside the exact promotion transaction, and deletion of
 the prior source or recovery material.
+
+The repository intentionally does not write its own future commit or carrier SHA256 into itself.
+After the last candidate commit, create the carrier, hash it, and publish those exact values in the
+external Schema-valid promotion plan. The CLI must prove that plan before any live path changes.
+
+## Successor P0 implementation evidence
+
+- Package, `skill_lifecycle.__version__`, uv lock and structured identity report `5.0.0`.
+- `skill --version` reports full commit, Git tree, deterministic identity SHA256, source cleanliness
+  and `mutations: 0`; new baselines preserve and health-check the same identity while reading V4
+  baselines compatibly during the hold.
+- `bootstrap.sh install` and `bootstrap.sh upgrade --plan ... [--apply]` are distinct. Upgrade runs
+  the candidate with absolute uv, `--offline`, `--frozen`, and no development dependency resolution.
+- The promotion plan pins candidate/carrier/formal/tool/state identities. Preview is byte-proven
+  zero-write; applied uv replacement uses explicit `--force --editable` and preserves the prior
+  receipt first; exact completed retry is zero-write.
+- Real old/new manager fixtures inject all four frozen failure points. Each restores the old commit,
+  uv receipt/tool source, four generated views, baseline bytes and activity resolution, then returns
+  old-manager health `PASS / mutations=0`. Baseline history remains retained after the final fault.
+- The exact-carrier rehearsal script refuses dirty or mismatched inputs and reruns the same public
+  integration matrix in disposable uv/XDG roots. Final counts and carrier identity are recorded only
+  after the last candidate commit.
 
 ## Promotion sequence after blockers close
 

@@ -118,3 +118,27 @@ The stable baseline is a canary during a temporary pilot. Expected inventory dri
 must not be hidden with rebaseline. The pilot passes only after rollback restores the original
 Registry/report hashes and formal health returns to PASS. V5 decisions, locks, transactions and probe
 evidence remain audit state beside Registry v1; they never become a second observed Registry.
+
+## Manager promotion contract
+
+Manager promotion is separate from the non-manager Phase D pilot. Its plan is the authorization and
+identity seam: it pins full old/new commits, clean candidate source, exact offline carrier and hash,
+formal source/activity/CLI, absolute uv tool roots and receipt, five state preimage hashes, and the
+expected physical inventory count. The repository cannot embed its own future commit or carrier hash;
+those post-commit facts belong in the external plan that the command validates before mutation.
+
+`skill --version` is zero-write and binds version `5.0.0`, source commit, and Git tree into one
+deterministic identity hash. `manager-upgrade` accepts only a FORMAL plan and previews by default.
+`manager-rehearse` accepts failure injection only for a REHEARSAL plan whose mutable paths are below
+one disposable sandbox root.
+
+Applied promotion captures the uv receipt and five state preimages before cloning the verified
+carrier. It then publishes the source at the unchanged canonical path, replaces the editable uv tool
+offline with explicit force, regenerates Registry JSON/YAML and both reports, archives/replaces the
+baseline once, and requires structured installed identity plus health `PASS / mutations=0`.
+
+Every failure after recovery capture enters the same reverse path. It restores the old canonical
+source, reinstalls the old tool when publication may have changed it, restores the exact receipt and
+five state files, proves the old commit/activity/inventory, and runs old-manager health. Failure
+evidence and any baseline-history item remain retained. A rollback mismatch returns
+`ROLLBACK_BLOCKED`; it never rebaselines around the mismatch.

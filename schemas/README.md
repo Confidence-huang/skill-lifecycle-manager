@@ -16,6 +16,7 @@ offline identifiers; validators must register the local files and must not fetch
 | `lock-candidates.schema.json` | Non-authoritative candidates blocked by missing approvals |
 | `pilot-probe-plan.schema.json` | Artifact-bound no-shell commands and exact expectations for one reviewed pilot |
 | `pilot-probe-evidence.schema.json` | Bounded transaction-owned output from the reviewed probe plan |
+| `manager-promotion-plan.schema.json` | Exact offline manager source, tool, state, recovery, and authorization pins |
 | `common.schema.json` | Shared IDs, paths, timestamps, hashes, scopes, and tree entries |
 
 The schemas intentionally reject unknown properties. A future additive field therefore requires a
