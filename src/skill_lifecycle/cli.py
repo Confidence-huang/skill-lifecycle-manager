@@ -16,6 +16,7 @@ from typing import Any  # Describe the structured result passed to the renderer.
 
 from skill_lifecycle.freshness import check_updates  # Compare configured PACKAGE releases without writes or fetch.
 from skill_lifecycle.inventory import governance_result, registry_result, report_result, scan_skills, write_registry  # Read and publish inventory evidence.
+from skill_lifecycle.manager_identity import manager_identity  # Report exact package and source identity without writes.
 from skill_lifecycle.operations import backup_preview, create_backup, inspect_install, install_skill, restore_backup, update_skill  # Execute explicit lifecycle transactions.
 from skill_lifecycle.paths import HostLayout, LifecycleBlocked  # Apply one host layout and shared stop gate.
 from skill_lifecycle.pilot import activate_pilot, approve_pilot, rollback_pilot, verify_pilot  # Run the reviewed Phase D decision-to-rollback chain.
@@ -27,11 +28,12 @@ from skill_lifecycle.verification import verify_target  # Collect bounded Static
 def parser() -> argparse.ArgumentParser:
     """Describe every command and make each mutating boundary visible as --apply."""
     root = argparse.ArgumentParser(prog="skill", description="Python 3.12 Linux-native Skill lifecycle CLI")
+    root.add_argument("--version", action="store_true", help="Report structured manager version and source identity")
     root.add_argument("--activity-root", type=Path, help="Override ~/.agents/skills")
     root.add_argument("--data-root", type=Path, help="Override XDG data storage")
     root.add_argument("--state-root", type=Path, help="Override XDG state storage")
     root.add_argument("--cache-root", type=Path, help="Override XDG transaction cache")
-    commands = root.add_subparsers(dest="command", required=True)
+    commands = root.add_subparsers(dest="command")
 
     scan = commands.add_parser("scan", help="Read live Skill identity without writing state")
     scan.add_argument("--root", action="append", type=Path, help="Explicit activity root; repeat as needed")
@@ -227,7 +229,20 @@ def main(arguments: list[str] | None = None) -> int:
     if sys.platform != "linux":
         print(json.dumps({"status": "BLOCKED", "error": "Linux runtime required."}), file=sys.stderr)
         return 1  # This runtime intentionally has no Windows compatibility branch.
-    parsed = parser().parse_args(arguments)
+    command_parser = parser()
+    parsed = command_parser.parse_args(arguments)
+    if parsed.version:
+        if parsed.command is not None:
+            command_parser.error("--version cannot be combined with a command")
+        try:
+            result = manager_identity()
+        except (LifecycleBlocked, OSError, ValueError) as error:
+            print(json.dumps({"status": "BLOCKED", "error": str(error)}), file=sys.stderr)
+            return 1
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+    if parsed.command is None:
+        command_parser.error("a command or --version is required")
     try:
         result = execute(parsed, layout(parsed))
     except (LifecycleBlocked, OSError, ValueError, json.JSONDecodeError) as error:

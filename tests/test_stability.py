@@ -35,6 +35,17 @@ class StabilityTests(unittest.TestCase):
         self.assertEqual(result["mutations"], 0)
         self.assertFalse(baseline_exists)
 
+    def test_stable_baseline_uses_the_structured_manager_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            host, manager = prepared_host(Path(temporary))
+            with patch("skill_lifecycle.stability.manager_repository", return_value=manager):
+                result = stabilize(host, False, False)
+
+        manager_record = result["baseline"]["manager"]
+        self.assertEqual(manager_record["version"], "5.0.0")
+        self.assertRegex(manager_record["sourceTree"], r"^[0-9a-f]{40}$")
+        self.assertRegex(manager_record["identitySHA256"], r"^[0-9A-F]{64}$")
+
     def test_stabilize_apply_and_health_pass_without_writes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             host, manager = prepared_host(Path(temporary))

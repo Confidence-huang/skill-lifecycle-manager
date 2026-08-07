@@ -18,6 +18,7 @@ from pathlib import Path  # Resolve manager, project, Registry, and backup ident
 from typing import Any  # Describe structured baseline and health documents.
 
 from skill_lifecycle.inventory import inventory_fingerprint, scan_skills  # Rebuild live physical identity.
+from skill_lifecycle.manager_identity import manager_identity, manager_repository as identity_repository  # Reuse the public manager identity contract.
 from skill_lifecycle.paths import HostLayout, LifecycleBlocked, atomic_json, sha256_file  # Share safe persistence.
 
 
@@ -34,11 +35,7 @@ def git_output(repository: Path, *arguments: str) -> str | None:
 
 def manager_repository() -> Path:
     """Resolve the Git repository that owns the installed Python package."""
-    package_root = Path(__file__).resolve().parents[2]  # Editable uv tools resolve back into src/.
-    top_level = git_output(package_root, "rev-parse", "--show-toplevel")
-    if not top_level:
-        raise LifecycleBlocked(f"Installed manager is not inside a Git repository: {package_root}")
-    return Path(top_level).resolve()
+    return identity_repository()  # Keep the existing patchable seam while sharing one implementation.
 
 
 def source_states(registry: dict[str, Any]) -> list[dict[str, Any]]:
@@ -95,6 +92,7 @@ def collect_baseline(layout: HostLayout) -> dict[str, Any]:
     activity_target = activity.resolve(strict=True)
     if activity_target != manager:
         raise LifecycleBlocked(f"Manager activity target does not match installed source: {activity_target}")
+    identity = manager_identity(manager)
     return {
         "schemaVersion": 1,
         "generatedAt": datetime.now(timezone.utc).isoformat(),
@@ -103,6 +101,9 @@ def collect_baseline(layout: HostLayout) -> dict[str, Any]:
         "manager": {
             "repository": str(manager),
             "commit": git_output(manager, "rev-parse", "HEAD"),
+            "version": identity["managerVersion"],
+            "sourceTree": identity["sourceTree"],
+            "identitySHA256": identity["identitySHA256"],
             "status": manager_status or "",
             "activityPath": str(activity),
             "activityTarget": os.readlink(activity),
@@ -186,6 +187,7 @@ def health(layout: HostLayout, project_root: Path | None = None) -> dict[str, An
     live = scan_skills(roots)
     manager = Path(baseline["manager"]["repository"])
     manager_activity = Path(baseline["manager"]["activityPath"])
+    identity = manager_identity(manager)
     checks = {
         "platform": baseline.get("platform") == "linux",
         "managerCommit": git_output(manager, "rev-parse", "HEAD") == baseline["manager"].get("commit"),
@@ -198,6 +200,10 @@ def health(layout: HostLayout, project_root: Path | None = None) -> dict[str, An
         "inventoryFingerprint": inventory_fingerprint(live["skills"]) == baseline["registry"].get("inventoryFingerprint"),
         "brokenLinks": live["summary"].get("brokenLinks") == 0,
     }
+    if "version" in baseline["manager"]:  # V4 baselines remain readable during the pre-promotion hold.
+        checks["managerVersion"] = identity["managerVersion"] == baseline["manager"].get("version")
+        checks["managerTree"] = identity["sourceTree"] == baseline["manager"].get("sourceTree")
+        checks["managerIdentitySHA256"] = identity["identitySHA256"] == baseline["manager"].get("identitySHA256")
     baseline_sources = {item["path"]: item for item in baseline.get("sources", [])}
     current_sources = {item["path"]: item for item in source_states(registry)}
     checks["localSourceState"] = current_sources == baseline_sources
