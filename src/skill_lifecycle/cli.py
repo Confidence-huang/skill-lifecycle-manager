@@ -17,6 +17,7 @@ from typing import Any  # Describe the structured result passed to the renderer.
 from skill_lifecycle.freshness import check_updates  # Compare configured PACKAGE releases without writes or fetch.
 from skill_lifecycle.inventory import governance_result, registry_result, report_result, scan_skills, write_registry  # Read and publish inventory evidence.
 from skill_lifecycle.manager_identity import manager_identity  # Report exact package and source identity without writes.
+from skill_lifecycle.manager_promotion import execute_manager_promotion, read_promotion_plan  # Run one exact offline self-promotion plan.
 from skill_lifecycle.operations import backup_preview, create_backup, inspect_install, install_skill, restore_backup, update_skill  # Execute explicit lifecycle transactions.
 from skill_lifecycle.paths import HostLayout, LifecycleBlocked  # Apply one host layout and shared stop gate.
 from skill_lifecycle.pilot import activate_pilot, approve_pilot, rollback_pilot, verify_pilot  # Run the reviewed Phase D decision-to-rollback chain.
@@ -123,6 +124,24 @@ def parser() -> argparse.ArgumentParser:
     rollback.add_argument("--reason", required=True)
     rollback.add_argument("--apply", action="store_true")
 
+    manager_upgrade = commands.add_parser("manager-upgrade", help="Preview or apply one exact offline manager promotion")
+    manager_upgrade.add_argument("--plan", type=Path, required=True, help="Schema-valid FORMAL promotion plan")
+    manager_upgrade.add_argument("--apply", action="store_true")
+
+    manager_rehearse = commands.add_parser("manager-rehearse", help="Inject one failure inside a disposable promotion sandbox")
+    manager_rehearse.add_argument("--plan", type=Path, required=True, help="Schema-valid REHEARSAL promotion plan")
+    manager_rehearse.add_argument(
+        "--failure-point",
+        required=True,
+        choices=(
+            "before-source-publication",
+            "after-cli-publication",
+            "after-registry-regeneration",
+            "after-baseline-archival",
+        ),
+    )
+    manager_rehearse.add_argument("--apply", action="store_true")
+
     health_parser = commands.add_parser("health", help="Compare frozen local evidence without writes or fetch")
     health_parser.add_argument("--project-root", type=Path)
     return root
@@ -221,6 +240,21 @@ def execute(arguments: argparse.Namespace, host: HostLayout) -> dict[str, Any]:
             "reason": arguments.reason,
         }
         return rollback_pilot(host, request, arguments.apply)
+    if arguments.command == "manager-upgrade":
+        plan = read_promotion_plan(arguments.plan)
+        if plan["mode"] != "FORMAL":
+            raise LifecycleBlocked("manager-upgrade requires a FORMAL promotion plan.")
+        return execute_manager_promotion(arguments.plan, host, arguments.apply)
+    if arguments.command == "manager-rehearse":
+        plan = read_promotion_plan(arguments.plan)
+        if plan["mode"] != "REHEARSAL":
+            raise LifecycleBlocked("manager-rehearse requires a REHEARSAL promotion plan.")
+        return execute_manager_promotion(
+            arguments.plan,
+            host,
+            arguments.apply,
+            arguments.failure_point if arguments.apply else None,
+        )
     return health(host, arguments.project_root)
 
 
