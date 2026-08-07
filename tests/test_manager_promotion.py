@@ -13,6 +13,7 @@ import uuid
 from pathlib import Path
 
 from skill_lifecycle.manager_promotion import execute_manager_promotion, preview_manager_promotion
+from skill_lifecycle.paths import LifecycleBlocked
 from support import git, layout
 
 
@@ -152,6 +153,8 @@ class ManagerPromotionTests(unittest.TestCase):
         }
         self.plan_path = self.root / "promotion-plan.json"
         self.plan_path.write_text(json.dumps(self.plan, indent=2) + "\n", encoding="utf-8")
+        self.old_state_hashes = dict(state_hashes)
+        self.old_receipt_sha256 = sha256(self.receipt)
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -215,6 +218,20 @@ class ManagerPromotionTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 1)
         self.assertIn("Usage: bootstrap.sh install", completed.stderr)
         self.assertIn("bootstrap.sh upgrade --plan", completed.stderr)
+
+    def test_rehearsal_path_escape_blocks_before_mutation(self) -> None:
+        escaped_plan = {
+            **self.plan,
+            "recoveryRoot": str(self.root.parent / f"escaped-{uuid.uuid4()}"),
+        }
+        escaped_plan_path = self.root / "escaped-plan.json"
+        escaped_plan_path.write_text(json.dumps(escaped_plan, indent=2) + "\n", encoding="utf-8")
+        before = tree_snapshot(self.root)
+
+        with self.assertRaises(LifecycleBlocked):
+            preview_manager_promotion(escaped_plan_path, self.host)
+
+        self.assertEqual(tree_snapshot(self.root), before)
 
 
 class RealManagerPromotionTests(unittest.TestCase):
@@ -310,6 +327,8 @@ class RealManagerPromotionTests(unittest.TestCase):
         }
         self.plan_path = self.root / "promotion-plan.json"
         self.plan_path.write_text(json.dumps(self.plan, indent=2) + "\n", encoding="utf-8")
+        self.old_state_hashes = dict(state_hashes)
+        self.old_receipt_sha256 = sha256(self.receipt)
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -318,6 +337,29 @@ class RealManagerPromotionTests(unittest.TestCase):
         completed = subprocess.run(command, text=True, capture_output=True, check=False, env=env)
         self.assertEqual(completed.returncode, 0, f"{command}\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}")
         return completed
+
+    def assert_old_state_restored(self, result: dict[str, object]) -> None:
+        self.assertEqual(git("rev-parse", "HEAD", cwd=self.formal_source), self.old_commit)
+        self.assertEqual(git("status", "--porcelain=v1", cwd=self.formal_source), "")
+        self.assertTrue(self.activity.is_symlink())
+        self.assertEqual(self.activity.resolve(strict=True), self.formal_source)
+        self.assertEqual(sha256(self.receipt), self.old_receipt_sha256)
+        for name, expected in self.old_state_hashes.items():
+            self.assertEqual(sha256(self.host.state_root / name), expected, name)
+        roots = [
+            "--activity-root",
+            str(self.host.activity_root),
+            "--data-root",
+            str(self.host.data_root),
+            "--state-root",
+            str(self.host.state_root),
+            "--cache-root",
+            str(self.host.cache_root),
+        ]
+        health = json.loads(self._run([str(self.formal_cli), *roots, "health"], env=self.uv_environment).stdout)
+        self.assertEqual(health["status"], "PASS")
+        self.assertEqual(health["mutations"], 0)
+        self.assertEqual(result["health"], health)
 
     def test_complete_offline_upgrade_publishes_new_identity_and_health(self) -> None:
         result = execute_manager_promotion(self.plan_path, self.host, apply=True)
@@ -345,6 +387,62 @@ class RealManagerPromotionTests(unittest.TestCase):
         self.assertEqual(second["action"], "MANAGER_PROMOTION_ALREADY_COMPLETE")
         self.assertEqual(second["mutations"], 0)
         self.assertEqual(tree_snapshot(self.root), before)
+
+    def test_failure_before_source_publication_restores_exact_preimages(self) -> None:
+        result = execute_manager_promotion(
+            self.plan_path,
+            self.host,
+            apply=True,
+            failure_point="before-source-publication",
+        )
+
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertEqual(result["action"], "MANAGER_PROMOTION_ROLLED_BACK")
+        self.assertEqual(result["failurePoint"], "before-source-publication")
+        self.assert_old_state_restored(result)
+
+    def test_failure_after_cli_publication_restores_source_tool_and_preimages(self) -> None:
+        result = execute_manager_promotion(
+            self.plan_path,
+            self.host,
+            apply=True,
+            failure_point="after-cli-publication",
+        )
+
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertEqual(result["action"], "MANAGER_PROMOTION_ROLLED_BACK")
+        self.assertEqual(result["failurePoint"], "after-cli-publication")
+        self.assert_old_state_restored(result)
+        self.assertTrue((self.recovery_root / "failed-new-source").is_dir())
+
+    def test_failure_after_registry_regeneration_restores_all_generated_views(self) -> None:
+        result = execute_manager_promotion(
+            self.plan_path,
+            self.host,
+            apply=True,
+            failure_point="after-registry-regeneration",
+        )
+
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertEqual(result["action"], "MANAGER_PROMOTION_ROLLED_BACK")
+        self.assertEqual(result["failurePoint"], "after-registry-regeneration")
+        self.assert_old_state_restored(result)
+
+    def test_failure_after_baseline_archival_restores_baseline_and_retains_history(self) -> None:
+        result = execute_manager_promotion(
+            self.plan_path,
+            self.host,
+            apply=True,
+            failure_point="after-baseline-archival",
+        )
+
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertEqual(result["action"], "MANAGER_PROMOTION_ROLLED_BACK")
+        self.assertEqual(result["failurePoint"], "after-baseline-archival")
+        self.assert_old_state_restored(result)
+        history = list((self.host.state_root / "baseline-history").glob("*.json"))
+        self.assertEqual(len(history), 1)
+        self.assertEqual(sha256(history[0]), self.old_state_hashes["skill-stability-baseline.json"])
 
 
 if __name__ == "__main__":

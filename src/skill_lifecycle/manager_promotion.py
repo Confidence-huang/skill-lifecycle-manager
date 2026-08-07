@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from skill_lifecycle.manager_identity import manager_identity
-from skill_lifecycle.paths import HostLayout, LifecycleBlocked, atomic_json, sha256_file
+from skill_lifecycle.paths import HostLayout, LifecycleBlocked, atomic_bytes, atomic_json, sha256_file
 from skill_lifecycle.shadow import read_json_object
 
 
@@ -25,6 +25,12 @@ STATE_PATHS = {
     "skill-capability-report.md": "capability_report_path",
     "skill-governance-report.md": "governance_report_path",
     "skill-stability-baseline.json": "baseline_path",
+}
+FAILURE_POINTS = {
+    "before-source-publication",
+    "after-cli-publication",
+    "after-registry-regeneration",
+    "after-baseline-archival",
 }
 PLAN_KEYS = {
     "schemaVersion",
@@ -364,6 +370,91 @@ def _completed_retry(plan: dict[str, Any], host: HostLayout) -> dict[str, Any] |
     }
 
 
+def _inject_failure(selected: str | None, current: str) -> None:
+    """Raise one deterministic rehearsal-only interruption at the named promotion gate."""
+    if selected == current:
+        raise LifecycleBlocked(f"Injected manager promotion failure: {current}")
+
+
+def _rollback_manager_promotion(
+    plan: dict[str, Any],
+    host: HostLayout,
+    recovery: Path,
+    steps: list[dict[str, str]],
+    error: BaseException,
+    failure_point: str | None,
+) -> dict[str, Any]:
+    """Restore exact old source, tool receipt, state bytes, activity, and health."""
+    transaction_path = recovery / "manager-promotion.json"
+    preimages = recovery / "preimages"
+    formal_source = Path(plan["formalSource"])
+    old_source = recovery / "old-source"
+    failed_source = recovery / "failed-new-source"
+    source_was_published = old_source.exists()
+    try:
+        if source_was_published:
+            if failed_source.exists() or failed_source.is_symlink():
+                raise LifecycleBlocked(f"Failed-source evidence path already exists: {failed_source}")
+            if formal_source.exists() or formal_source.is_symlink():
+                formal_source.rename(failed_source)
+            old_source.rename(formal_source)
+
+        environment = _tool_environment(plan)
+        if source_was_published:
+            _run(
+                [plan["uvPath"], "tool", "install", "--offline", "--force", "--editable", str(formal_source)],
+                environment=environment,
+            )
+        receipt_preimage = preimages / "uv-receipt.toml"
+        atomic_bytes(Path(plan["uvReceipt"]), receipt_preimage.read_bytes())
+        if sha256_file(Path(plan["uvReceipt"])) != sha256_file(receipt_preimage):
+            raise LifecycleBlocked("Rollback uv receipt failed exact preimage verification.")
+
+        for name, attribute in STATE_PATHS.items():
+            destination = getattr(host, attribute)
+            source = preimages / "state" / name
+            atomic_bytes(destination, source.read_bytes())
+            if sha256_file(destination) != plan["stateSHA256"][name]:
+                raise LifecycleBlocked(f"Rollback state preimage mismatch: {destination}")
+
+        if _git(formal_source, "rev-parse", "HEAD") != plan["oldCommit"]:
+            raise LifecycleBlocked("Rollback did not restore the old manager commit.")
+        if _git(formal_source, "status", "--porcelain=v1"):
+            raise LifecycleBlocked("Rollback restored a dirty manager source.")
+        activity = Path(plan["activityEntry"])
+        if not activity.is_symlink() or activity.resolve(strict=True) != formal_source:
+            raise LifecycleBlocked("Rollback did not restore manager activity resolution.")
+        if _receipt_source(Path(plan["uvReceipt"])) != formal_source:
+            raise LifecycleBlocked("Rollback receipt does not resolve to formalSource.")
+        if _inventory_count(host.registry_path) != plan["expectedInventoryCount"]:
+            raise LifecycleBlocked("Rollback did not restore the old inventory count.")
+        health_result = _json_command(_manager_command(plan, host, "health"), environment=environment)
+        if health_result.get("status") != "PASS" or health_result.get("mutations") != 0:
+            raise LifecycleBlocked("Rollback old-manager health did not pass with zero mutations.")
+        steps.append({"name": "rollback", "status": "PASS", "detail": "Restored exact old manager preimages and health."})
+        atomic_json(transaction_path, _transaction_record(plan, "ROLLED_BACK", steps))
+        return {
+            "status": "BLOCKED",
+            "action": "MANAGER_PROMOTION_ROLLED_BACK",
+            "transactionID": plan["transactionID"],
+            "oldCommit": plan["oldCommit"],
+            "newCommit": plan["newCommit"],
+            "failurePoint": failure_point,
+            "error": str(error),
+            "health": health_result,
+            "recoveryRoot": str(recovery),
+            "transactionPath": str(transaction_path),
+            "mutations": len(steps),
+        }
+    except BaseException as rollback_error:
+        steps.append({"name": "rollback", "status": "BLOCKED", "detail": str(rollback_error)[:2048]})
+        try:
+            atomic_json(transaction_path, _transaction_record(plan, "ROLLBACK_BLOCKED", steps))
+        except OSError:
+            pass
+        raise LifecycleBlocked(f"Promotion failed ({error}); rollback blocked ({rollback_error}).") from rollback_error
+
+
 def execute_manager_promotion(
     plan_path: Path,
     host: HostLayout,
@@ -373,10 +464,10 @@ def execute_manager_promotion(
     """Apply one exact offline promotion; preview remains the default public behavior."""
     if not apply:
         return preview_manager_promotion(plan_path, host)
-    if failure_point is not None:
-        raise LifecycleBlocked("Failure injection is not implemented until the rollback slice is active.")
 
     plan = read_promotion_plan(plan_path)
+    if failure_point is not None and (failure_point not in FAILURE_POINTS or plan["mode"] != "REHEARSAL"):
+        raise LifecycleBlocked("Failure injection requires one supported point and a REHEARSAL plan.")
     completed = _completed_retry(plan, host)
     if completed is not None:
         return completed
@@ -393,68 +484,76 @@ def execute_manager_promotion(
     steps.append({"name": "capture-preimages", "status": "PASS"})
     atomic_json(transaction_path, _transaction_record(plan, "IN_PROGRESS", steps))
 
-    staged_source = recovery / "staged-source"
-    _run(["git", "clone", "--no-checkout", "--", plan["carrierPath"], str(staged_source)])
-    _run(["git", "-C", str(staged_source), "checkout", "--detach", plan["newCommit"]])
-    if _git(staged_source, "status", "--porcelain=v1"):
-        raise LifecycleBlocked("Staged promotion source is dirty.")
-    steps.append({"name": "stage-source", "status": "PASS"})
-    atomic_json(transaction_path, _transaction_record(plan, "IN_PROGRESS", steps))
+    try:
+        staged_source = recovery / "staged-source"
+        _run(["git", "clone", "--no-checkout", "--", plan["carrierPath"], str(staged_source)])
+        _run(["git", "-C", str(staged_source), "checkout", "--detach", plan["newCommit"]])
+        if _git(staged_source, "status", "--porcelain=v1"):
+            raise LifecycleBlocked("Staged promotion source is dirty.")
+        steps.append({"name": "stage-source", "status": "PASS"})
+        atomic_json(transaction_path, _transaction_record(plan, "IN_PROGRESS", steps))
+        _inject_failure(failure_point, "before-source-publication")
 
-    formal_source = Path(plan["formalSource"])
-    old_source = recovery / "old-source"
-    formal_source.rename(old_source)
-    staged_source.rename(formal_source)
-    if not Path(plan["activityEntry"]).is_symlink() or Path(plan["activityEntry"]).resolve(strict=True) != formal_source:
-        raise LifecycleBlocked("Activity entry did not preserve the canonical formal source path.")
-    steps.append({"name": "publish-source", "status": "PASS"})
-    atomic_json(transaction_path, _transaction_record(plan, "IN_PROGRESS", steps))
+        formal_source = Path(plan["formalSource"])
+        old_source = recovery / "old-source"
+        formal_source.rename(old_source)
+        staged_source.rename(formal_source)
+        if not Path(plan["activityEntry"]).is_symlink() or Path(plan["activityEntry"]).resolve(strict=True) != formal_source:
+            raise LifecycleBlocked("Activity entry did not preserve the canonical formal source path.")
+        steps.append({"name": "publish-source", "status": "PASS"})
+        atomic_json(transaction_path, _transaction_record(plan, "IN_PROGRESS", steps))
 
-    environment = _tool_environment(plan)
-    _run(
-        [plan["uvPath"], "tool", "install", "--offline", "--force", "--editable", str(formal_source)],
-        environment=environment,
-    )
-    installed_identity = _json_command([plan["formalCLI"], "--version"], environment=environment)
-    if installed_identity.get("sourceCommit") != plan["newCommit"] or installed_identity.get("managerVersion") != plan["newManagerVersion"]:
-        raise LifecycleBlocked("Installed manager identity does not match the promotion plan.")
-    if _receipt_source(Path(plan["uvReceipt"])) != formal_source:
-        raise LifecycleBlocked("Published uv receipt does not resolve to the promoted formal source.")
-    steps.append({"name": "publish-cli", "status": "PASS"})
-    atomic_json(transaction_path, _transaction_record(plan, "IN_PROGRESS", steps))
+        environment = _tool_environment(plan)
+        _run(
+            [plan["uvPath"], "tool", "install", "--offline", "--force", "--editable", str(formal_source)],
+            environment=environment,
+        )
+        installed_identity = _json_command([plan["formalCLI"], "--version"], environment=environment)
+        if installed_identity.get("sourceCommit") != plan["newCommit"] or installed_identity.get("managerVersion") != plan["newManagerVersion"]:
+            raise LifecycleBlocked("Installed manager identity does not match the promotion plan.")
+        if _receipt_source(Path(plan["uvReceipt"])) != formal_source:
+            raise LifecycleBlocked("Published uv receipt does not resolve to the promoted formal source.")
+        steps.append({"name": "publish-cli", "status": "PASS"})
+        atomic_json(transaction_path, _transaction_record(plan, "IN_PROGRESS", steps))
+        _inject_failure(failure_point, "after-cli-publication")
 
-    for command in ("registry", "report", "governance"):
-        result = _json_command(_manager_command(plan, host, command, "--apply"), environment=environment)
-        if result.get("status") != "PASS":
-            raise LifecycleBlocked(f"Promoted manager {command} publication did not pass.")
-    if _inventory_count(host.registry_path) != plan["expectedInventoryCount"]:
-        raise LifecycleBlocked("Promoted Registry physical entry count changed unexpectedly.")
-    steps.append({"name": "publish-generated-state", "status": "PASS"})
-    atomic_json(transaction_path, _transaction_record(plan, "IN_PROGRESS", steps))
+        for command in ("registry", "report", "governance"):
+            result = _json_command(_manager_command(plan, host, command, "--apply"), environment=environment)
+            if result.get("status") != "PASS":
+                raise LifecycleBlocked(f"Promoted manager {command} publication did not pass.")
+        if _inventory_count(host.registry_path) != plan["expectedInventoryCount"]:
+            raise LifecycleBlocked("Promoted Registry physical entry count changed unexpectedly.")
+        steps.append({"name": "publish-generated-state", "status": "PASS"})
+        atomic_json(transaction_path, _transaction_record(plan, "IN_PROGRESS", steps))
+        _inject_failure(failure_point, "after-registry-regeneration")
 
-    stabilization = _json_command(
-        _manager_command(plan, host, "stabilize", "--apply", "--archive-existing"),
-        environment=environment,
-    )
-    if stabilization.get("status") != "PASS" or not stabilization.get("archivedBaselinePath"):
-        raise LifecycleBlocked("Promoted manager did not archive and replace the stable baseline.")
-    steps.append({"name": "archive-and-rebaseline", "status": "PASS"})
-    atomic_json(transaction_path, _transaction_record(plan, "IN_PROGRESS", steps))
+        stabilization = _json_command(
+            _manager_command(plan, host, "stabilize", "--apply", "--archive-existing"),
+            environment=environment,
+        )
+        if stabilization.get("status") != "PASS" or not stabilization.get("archivedBaselinePath"):
+            raise LifecycleBlocked("Promoted manager did not archive and replace the stable baseline.")
+        steps.append({"name": "archive-and-rebaseline", "status": "PASS"})
+        atomic_json(transaction_path, _transaction_record(plan, "IN_PROGRESS", steps))
+        _inject_failure(failure_point, "after-baseline-archival")
 
-    health_result = _json_command(_manager_command(plan, host, "health"), environment=environment)
-    if health_result.get("status") != "PASS" or health_result.get("mutations") != 0:
-        raise LifecycleBlocked("Promoted manager health did not pass with zero mutations.")
-    if (host.activity_root / "oil-tone").exists() or (host.activity_root / "oil-tone").is_symlink():
-        raise LifecycleBlocked("Promotion acceptance found forbidden oil-tone activity.")
-    steps.append({"name": "accept", "status": "PASS"})
-    atomic_json(transaction_path, _transaction_record(plan, "PROMOTED", steps))
-    return {
-        **preview,
-        "action": "MANAGER_PROMOTED",
-        "installedIdentity": installed_identity,
-        "archivedBaselinePath": stabilization["archivedBaselinePath"],
-        "health": health_result,
-        "recoveryRoot": str(recovery),
-        "transactionPath": str(transaction_path),
-        "mutations": len(steps) + 3,
-    }
+        health_result = _json_command(_manager_command(plan, host, "health"), environment=environment)
+        if health_result.get("status") != "PASS" or health_result.get("mutations") != 0:
+            raise LifecycleBlocked("Promoted manager health did not pass with zero mutations.")
+        if (host.activity_root / "oil-tone").exists() or (host.activity_root / "oil-tone").is_symlink():
+            raise LifecycleBlocked("Promotion acceptance found forbidden oil-tone activity.")
+        steps.append({"name": "accept", "status": "PASS"})
+        atomic_json(transaction_path, _transaction_record(plan, "PROMOTED", steps))
+        return {
+            **preview,
+            "action": "MANAGER_PROMOTED",
+            "installedIdentity": installed_identity,
+            "archivedBaselinePath": stabilization["archivedBaselinePath"],
+            "health": health_result,
+            "recoveryRoot": str(recovery),
+            "transactionPath": str(transaction_path),
+            "mutations": len(steps) + 3,
+        }
+    except BaseException as error:
+        steps.append({"name": "promotion-failure", "status": "BLOCKED", "detail": str(error)[:2048]})
+        return _rollback_manager_promotion(plan, host, recovery, steps, error, failure_point)
