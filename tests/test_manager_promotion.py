@@ -243,11 +243,22 @@ class RealManagerPromotionTests(unittest.TestCase):
         self.host = layout(self.root / "host")
         current_repository = Path(__file__).resolve().parents[1]
         self.candidate_source = self.root / "candidate-source"
-        git("clone", str(current_repository), str(self.candidate_source), cwd=self.root)
+        external_carrier = os.environ.get("SLM_REHEARSAL_CARRIER")
+        clone_source = Path(external_carrier).resolve(strict=True) if external_carrier else current_repository
+        git("clone", str(clone_source), str(self.candidate_source), cwd=self.root)
+        expected_new = os.environ.get("SLM_REHEARSAL_NEW_COMMIT")
+        if expected_new:
+            git("checkout", "--detach", expected_new, cwd=self.candidate_source)
         self.new_commit = git("rev-parse", "HEAD", cwd=self.candidate_source)
-        self.old_commit = "564215ba6c82927fc8ba2a9fc8943a6adef2e3ee"
-        self.carrier = self.root / "manager.bundle"
-        git("bundle", "create", str(self.carrier), "--all", cwd=self.candidate_source)
+        self.old_commit = os.environ.get(
+            "SLM_REHEARSAL_OLD_COMMIT",
+            "564215ba6c82927fc8ba2a9fc8943a6adef2e3ee",
+        )
+        if external_carrier:
+            self.carrier = Path(external_carrier).resolve(strict=True)
+        else:
+            self.carrier = self.root / "manager.bundle"
+            git("bundle", "create", str(self.carrier), "--all", cwd=self.candidate_source)
 
         self.formal_source = self.root / "formal-source"
         git("clone", str(self.candidate_source), str(self.formal_source), cwd=self.root)
@@ -256,7 +267,7 @@ class RealManagerPromotionTests(unittest.TestCase):
         self.activity = self.host.activity_root / "skill-lifecycle-manager"
         self.activity.symlink_to(self.formal_source, target_is_directory=True)
 
-        self.uv_path = Path("/home/a/.local/bin/uv")
+        self.uv_path = Path(os.environ.get("SLM_REHEARSAL_UV", "/home/a/.local/bin/uv"))
         self.tool_dir = self.root / "uv-tools"
         self.tool_bin = self.root / "tool-bin"
         self.uv_environment = {
