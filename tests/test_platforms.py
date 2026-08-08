@@ -4,6 +4,8 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
+from subprocess import CompletedProcess
+from unittest.mock import patch
 
 from skill_lifecycle.cli import execute
 from skill_lifecycle.paths import HostLayout, LifecycleBlocked
@@ -63,6 +65,17 @@ class PlatformTests(unittest.TestCase):
         adapter = HostPlatform("windows")
         with self.assertRaises(OSError):
             adapter.create_directory_link(Path("C:/target"), Path("C:/bad%PATH%"))
+
+    def test_windows_junction_uses_separate_command_arguments(self) -> None:
+        adapter = HostPlatform("windows")
+        target = Path("C:/target path")
+        link = Path("C:/active path")
+        with patch("skill_lifecycle.platforms.subprocess.run", return_value=CompletedProcess([], 0, "", "")) as run:
+            adapter.create_directory_link(target, link)
+        self.assertEqual(
+            run.call_args.args[0],
+            ["cmd.exe", "/d", "/c", "mklink", "/J", str(link), str(target)],
+        )
 
     def test_windows_blocks_unrehearsed_manager_promotion(self) -> None:
         adapter = HostPlatform("windows")

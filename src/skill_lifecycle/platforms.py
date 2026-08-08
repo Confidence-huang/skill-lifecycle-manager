@@ -88,11 +88,10 @@ class HostPlatform:
         if self.name != "windows":
             raise UnsupportedPlatform(f"Unsupported host platform: {self.name}")
         for value in (str(link), str(target)):
-            if any(character in value for character in ('"', "%", "!", "\r", "\n")):
+            if any(character in value for character in ('"', "%", "!", "&", "|", "<", ">", "^", "(", ")", "\r", "\n")):
                 raise OSError("Windows junction paths cannot contain cmd expansion characters.")
-        command = f'mklink /J "{link}" "{target}"'
         completed = subprocess.run(
-            ["cmd.exe", "/d", "/s", "/c", command],
+            ["cmd.exe", "/d", "/c", "mklink", "/J", str(link), str(target)],
             text=True,
             capture_output=True,
             check=False,

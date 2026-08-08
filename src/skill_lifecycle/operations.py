@@ -80,7 +80,7 @@ def inspect_install(layout: HostLayout, source: str, mode: str, skill_path: str 
             raise LifecycleBlocked(f"Destination already exists: {destination}")
         if activity != destination and layout.platform.link_exists(activity):
             raise LifecycleBlocked(f"Activity entry already exists: {activity}")
-        relative_skill = candidate.relative_to(staged)
+        relative_skill = candidate.relative_to(staged.resolve(strict=True))
         return {
             "status": "PASS",
             "action": "INSTALL_PREVIEW",
@@ -114,7 +114,7 @@ def install_skill(layout: HostLayout, source: str, mode: str = "auto", skill_pat
             if completed.returncode:
                 raise LifecycleBlocked(f"Git clone failed: {completed.stderr.strip()}")
         candidate = find_candidate(staged, skill_path)
-        relative_skill = candidate.relative_to(staged)
+        relative_skill = candidate.relative_to(staged.resolve(strict=True))
         candidate_updates = None  # SOURCE/HYBRID entries never consume PACKAGE-only provenance.
         if selected == "package":
             candidate_package, _, package_issues = read_package_record(candidate)  # Preserve only a validated optional update channel.
