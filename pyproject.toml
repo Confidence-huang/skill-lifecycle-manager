@@ -1,7 +1,7 @@
 [project]
 name = "skill-lifecycle-manager"
-version = "5.1.0"
-description = "Python 3.12 Windows and Linux Skill lifecycle and governance CLI"
+version = "5.2.0"
+description = "Python 3.12 Windows and Linux Skill lifecycle guardian and governance CLI"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
@@ -22,7 +22,7 @@ Repository = "https://github.com/Confidence-huang/skill-lifecycle-manager"
 Issues = "https://github.com/Confidence-huang/skill-lifecycle-manager/issues"
 
 [dependency-groups]
-dev = ["jsonschema>=4.25,<5"]
+dev = ["jsonschema>=4.25,<5", "pyyaml>=6,<7"]
 
 [project.scripts]
 skill = "skill_lifecycle.cli:main"

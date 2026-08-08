@@ -14,6 +14,8 @@ runs on Windows and Linux; mutating commands preview by default and require `--a
 - explicit Static, Runtime, and Behavior verification;
 - transactional PACKAGE, SOURCE, and HYBRID installation;
 - validated fast-forward source updates and read-only release checks;
+- scan-only daily Guardian reports with declared dependency and compatibility probes;
+- exact, expiring human approvals required before source updates are applied;
 - link-aware backups, verified restores, immutable baselines, and zero-write health checks;
 - isolated V5 artifact, approval, evidence, lock, and transaction contracts.
 
@@ -26,6 +28,8 @@ runs on Windows and Linux; mutating commands preview by default and require `--a
 | Install/update | ✅ symbolic link | ✅ directory junction |
 | Backup/restore and stable health | ✅ | ✅ |
 | V5 contract and shadow validation | ✅ | ✅ |
+| Daily Guardian scan/report scheduling | ✅ systemd user timer | ✅ Task Scheduler |
+| Guardian approval-gated source updates | ✅ | ✅ |
 | Reviewed Phase D pilot activation | ✅ | Not yet verified |
 | Offline manager self-promotion/rehearsal | ✅ | Not yet verified |
 
@@ -59,6 +63,10 @@ uv run skill --help
 uv build
 ```
 
+Run repository Python only through `uv run python`; do not install a system `python` alias. The
+Guardian schedule records the installed tool environment's exact interpreter path so it does not
+depend on whichever Python happens to appear on `PATH` later.
+
 ## Core workflow
 
 ```text
@@ -70,6 +78,11 @@ skill verify --target-skill PATH --apply
 skill install SOURCE --mode source
 skill install SOURCE --mode source --apply
 skill update --name NAME
+skill guardian policy --file guardian-policy.json --apply
+skill guardian scan --apply
+skill guardian schedule --time 03:00 --apply
+skill guardian approve --report REPORT.json --name NAME ... --apply
+skill update --name NAME --approval APPROVAL.json --evaluated-at TIMESTAMP --apply
 skill backup --path PATH --apply
 skill stabilize --apply
 skill health
@@ -85,6 +98,9 @@ mutation, governance, stability, and V5 supply-chain contracts.
 
 - no implicit overwrite, merge, deletion, repair, or activation;
 - Git state is pinned to full commits and updates must prove fast-forward ancestry;
+- scheduled Guardian work publishes reports but cannot enter an install or update transaction;
+- compatibility stays `UNKNOWN` unless a declared bounded probe supplies direct evidence;
+- no risk tier permits unattended production updates in V5.2;
 - verification uses argument arrays, bounded output, timeouts, and credential redaction;
 - backups do not follow activity links and restores do not silently recreate host-specific links;
 - stable health never fetches, installs, updates, or writes;

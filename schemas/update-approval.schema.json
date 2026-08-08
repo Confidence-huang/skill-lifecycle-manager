@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skill-lifecycle-manager.local/schemas/v5/update-approval.schema.json",
+  "title": "Exact human approval for one Guardian-observed source update",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "documentType", "decisionID", "decision", "skillName", "lifecycleMode", "current", "candidate", "registryFingerprint", "policyVersion", "policySHA256", "reportPath", "reportSHA256", "requestedBy", "requestedAt", "decidedBy", "decidedAt", "expiresAt", "reason"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "documentType": {"const": "SKILL_GUARDIAN_UPDATE_APPROVAL"},
+    "decisionID": {"type": "string", "pattern": "^approval-[0-9a-f-]{36}$"},
+    "decision": {"const": "APPROVED"},
+    "skillName": {"type": "string", "minLength": 1, "maxLength": 128},
+    "lifecycleMode": {"enum": ["SOURCE", "HYBRID"]},
+    "current": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "candidate": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "registryFingerprint": {"type": "string", "pattern": "^[0-9A-F]{64}$"},
+    "policyVersion": {"type": "string", "minLength": 1, "maxLength": 128},
+    "policySHA256": {"type": ["string", "null"], "pattern": "^[0-9A-F]{64}$"},
+    "reportPath": {"type": "string", "minLength": 1},
+    "reportSHA256": {"type": "string", "pattern": "^[0-9A-F]{64}$"},
+    "requestedBy": {"type": "string", "minLength": 1, "maxLength": 256},
+    "requestedAt": {"type": "string", "format": "date-time"},
+    "decidedBy": {"type": "string", "minLength": 1, "maxLength": 256},
+    "decidedAt": {"type": "string", "format": "date-time"},
+    "expiresAt": {"type": "string", "format": "date-time"},
+    "reason": {"type": "string", "minLength": 1, "maxLength": 4096}
+  }
+}

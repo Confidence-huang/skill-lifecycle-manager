@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skill-lifecycle-manager.local/schemas/v5/guardian-policy.schema.json",
+  "title": "Skill Guardian desired monitoring policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "documentType", "policyVersion", "skills"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "documentType": {"const": "SKILL_GUARDIAN_POLICY"},
+    "policyVersion": {"type": "string", "minLength": 1, "maxLength": 128},
+    "skills": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/skillPolicy"}
+    }
+  },
+  "$defs": {
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "arguments"],
+      "properties": {
+        "command": {"type": "string", "minLength": 1, "maxLength": 256},
+        "arguments": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {"type": "string", "maxLength": 1024}
+        }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "command", "arguments"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "command": {"type": "string", "minLength": 1, "maxLength": 256},
+        "arguments": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {"type": "string", "maxLength": 1024}
+        }
+      }
+    },
+    "skillPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "enabled", "riskTier", "updatePolicy", "dependencies", "compatibilityProbe"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "enabled": {"type": "boolean"},
+        "riskTier": {"enum": ["UNKNOWN", "LOW", "MEDIUM", "HIGH", "CRITICAL"]},
+        "updatePolicy": {"enum": ["NOTIFY", "REQUIRE_APPROVAL"]},
+        "dependencies": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {"$ref": "#/$defs/dependency"}
+        },
+        "compatibilityProbe": {
+          "oneOf": [
+            {"$ref": "#/$defs/probe"},
+            {"type": "null"}
+          ]
+        }
+      }
+    }
+  }
+}

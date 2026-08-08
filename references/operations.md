@@ -40,15 +40,20 @@ Verification never repairs a missing module, executable, dependency, environment
 
 1. Read the canonical JSON Registry.
 2. Require one clean Git repository per selected asset.
-3. Fetch `origin` and resolve the configured candidate ref or current upstream.
-4. Require the local commit to be an ancestor of the candidate.
-5. Create a detached temporary worktree at the candidate commit.
-6. Validate every eligible candidate Skill entry.
-7. Remove the temporary worktree.
-8. Fast-forward the managed repository only after validation passes.
-9. Regenerate the Registry.
+3. Resolve the configured remote candidate with `ls-remote` and no fetch.
+4. When `--apply` would change the commit, require an unexpired Guardian approval bound to the exact
+   Skill, current commit, candidate commit, Registry fingerprint, policy identity, and immutable report.
+5. Fetch `origin` only after approval passes.
+6. Require the local commit to be an ancestor of the candidate.
+7. Create a detached temporary worktree at the candidate commit.
+8. Validate every eligible candidate Skill entry.
+9. Remove the temporary worktree.
+10. Fast-forward the managed repository only after validation passes.
+11. Regenerate the Registry.
 
 No worktree change occurs before the final fast-forward. A fetch or validation failure therefore needs cleanup, not history rewriting.
+V5.2 requires both `--approval` and `--evaluated-at` for a changing source update. Preview remains
+zero-write and needs neither value.
 
 ## Backup transaction
 

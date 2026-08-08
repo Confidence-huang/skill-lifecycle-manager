@@ -132,8 +132,8 @@ def _validate_plan_shape(plan: dict[str, Any]) -> None:
             raise LifecycleBlocked(f"Promotion plan {field} must be one full lowercase commit.")
     if plan["oldCommit"] == plan["newCommit"]:
         raise LifecycleBlocked("Promotion old and new commits must differ.")
-    if plan["newManagerVersion"] != "5.1.0":
-        raise LifecycleBlocked("Promotion successor version must be exactly 5.1.0.")
+    if plan["newManagerVersion"] != "5.2.0":
+        raise LifecycleBlocked("Promotion successor version must be exactly 5.2.0.")
     if not isinstance(plan["expectedInventoryCount"], int) or isinstance(plan["expectedInventoryCount"], bool) or plan["expectedInventoryCount"] < 1:
         raise LifecycleBlocked("Promotion expectedInventoryCount must be a positive integer.")
     if not isinstance(plan["authorizedBy"], str) or not plan["authorizedBy"].strip():

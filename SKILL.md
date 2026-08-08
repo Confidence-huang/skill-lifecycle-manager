@@ -1,6 +1,6 @@
 ---
 name: skill-lifecycle-manager
-description: Manage and govern the lifecycle of Codex and cross-agent Skills on Windows and Linux with a Python 3.12 and uv CLI. Use to inventory or classify Skills, generate the canonical Registry, report evidence-backed governance, run explicit Static Runtime and Behavior verification, install or update one managed Skill transactionally, create or restore a link-aware backup, freeze a host-local stable baseline, or run zero-write health checks.
+description: Manage and govern the lifecycle of Codex and cross-agent Skills on Windows and Linux with a Python 3.12 and uv CLI. Use to inventory or classify Skills, generate the canonical Registry, run daily scan-only Guardian checks, publish update and compatibility reports, require exact human approval before source updates, verify Skills, install or update transactionally, back up or restore capabilities, freeze a stable baseline, or run zero-write health checks.
 ---
 
 # Skill Lifecycle Manager
@@ -12,6 +12,7 @@ activity entries, observed Registry state, verification evidence, and recovery m
 
 1. Load workspace and project rules before changing Skill state.
 2. Use Python 3.12 through the committed uv project and lock file.
+   Run repository scripts as `uv run python ...`; never create or require a system `python` alias.
 3. Run the matching preview before every lifecycle mutation.
 4. Treat `PASS`, `BLOCKED`, `UNKNOWN`, `NOT_CONFIGURED`, and `NOT_RUN` literally.
 5. Mutating commands require `--apply`; never add it unless the user authorized that exact change.
@@ -25,6 +26,9 @@ activity entries, observed Registry state, verification evidence, and recovery m
 12. Treat Registry and baselines as host-local evidence; regenerate them after an OS migration.
 13. On Windows, do not run Phase D pilot or manager-promotion commands. The CLI blocks them until a
     Windows-native rollback rehearsal is implemented and verified.
+14. Guardian scheduling runs only `guardian scan --apply`; no policy tier authorizes unattended
+    install, update, activation, project-log editing, or dependency repair.
+15. Compatibility remains `UNKNOWN` unless a declared bounded probe supplies direct evidence.
 
 ## Command entry
 
@@ -71,7 +75,7 @@ skill install SOURCE --mode package
 skill install SOURCE --mode source --apply
 skill install SOURCE --mode hybrid --skill-path skills/NAME --apply
 skill update --name NAME
-skill update --name NAME --apply
+skill update --name NAME --approval APPROVAL.json --evaluated-at TIMESTAMP --apply
 skill updates --name NAME
 skill backup --path PATH --apply
 skill restore --backup-path BACKUP --destination EMPTY_PATH --apply
@@ -80,6 +84,24 @@ skill restore --backup-path BACKUP --destination EMPTY_PATH --apply
 Installation publishes Registry evidence only after required probes pass. Update never uses an
 unchecked pull or history rewrite. Restore returns link records for review instead of silently
 recreating machine-specific topology. Read [references/operations.md](references/operations.md).
+
+## Daily Guardian
+
+```text
+skill guardian policy --file /exact/guardian-policy.json
+skill guardian policy --file /exact/guardian-policy.json --apply
+skill guardian scan
+skill guardian scan --apply
+skill guardian schedule --time 03:00
+skill guardian schedule --time 03:00 --apply
+```
+
+The Guardian consumes the existing canonical Registry; it does not create a second Registry. A
+missing per-Skill rule uses `UNKNOWN` risk plus `REQUIRE_APPROVAL`. Scheduled scans may write only
+Guardian JSON/Markdown evidence. Publish a report-bound credential with
+`skill guardian approve ... --apply`, then pass that file and an exact timezone-aware evaluation
+time to `skill update ... --apply`. Read [references/guardian.md](references/guardian.md) before
+enabling a schedule or approving an update.
 
 ## Stable operation
 

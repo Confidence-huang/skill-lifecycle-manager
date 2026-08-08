@@ -136,7 +136,7 @@ class ManagerPromotionTests(unittest.TestCase):
             "sandboxRoot": str(self.root),
             "oldCommit": self.old_commit,
             "newCommit": self.new_commit,
-            "newManagerVersion": "5.1.0",
+            "newManagerVersion": "5.2.0",
             "candidateSource": str(self.repository),
             "carrierPath": str(self.carrier),
             "carrierSHA256": sha256(self.carrier),
@@ -170,7 +170,7 @@ class ManagerPromotionTests(unittest.TestCase):
         self.assertEqual(result["action"], "MANAGER_PROMOTION_PREVIEW")
         self.assertEqual(result["oldCommit"], self.old_commit)
         self.assertEqual(result["newCommit"], self.new_commit)
-        self.assertEqual(result["managerVersion"], "5.1.0")
+        self.assertEqual(result["managerVersion"], "5.2.0")
         self.assertEqual(result["mutations"], 0)
         self.assertEqual(tree_snapshot(self.root), before)
 
@@ -266,13 +266,13 @@ class RealManagerPromotionTests(unittest.TestCase):
             git("config", "user.email", "fixture@example.invalid", cwd=self.candidate_source)
             init_path = self.candidate_source / "src/skill_lifecycle/__init__.py"
             project_path = self.candidate_source / "pyproject.toml"
-            init_path.write_text(init_path.read_text(encoding="utf-8").replace('5.1.0', '5.0.0'), encoding="utf-8")
-            project_path.write_text(project_path.read_text(encoding="utf-8").replace('5.1.0', '5.0.0'), encoding="utf-8")
+            init_path.write_text(init_path.read_text(encoding="utf-8").replace('5.2.0', '5.0.0'), encoding="utf-8")
+            project_path.write_text(project_path.read_text(encoding="utf-8").replace('5.2.0', '5.0.0'), encoding="utf-8")
             git("add", "--all", cwd=self.candidate_source)
             git("commit", "-m", "fixture old manager", cwd=self.candidate_source)
             self.old_commit = git("rev-parse", "HEAD", cwd=self.candidate_source)
-            init_path.write_text(init_path.read_text(encoding="utf-8").replace('5.0.0', '5.1.0'), encoding="utf-8")
-            project_path.write_text(project_path.read_text(encoding="utf-8").replace('5.0.0', '5.1.0'), encoding="utf-8")
+            init_path.write_text(init_path.read_text(encoding="utf-8").replace('5.0.0', '5.2.0'), encoding="utf-8")
+            project_path.write_text(project_path.read_text(encoding="utf-8").replace('5.0.0', '5.2.0'), encoding="utf-8")
             git("add", "--all", cwd=self.candidate_source)
             git("commit", "-m", "fixture new manager", cwd=self.candidate_source)
             self.new_commit = git("rev-parse", "HEAD", cwd=self.candidate_source)
@@ -341,7 +341,7 @@ class RealManagerPromotionTests(unittest.TestCase):
             "sandboxRoot": str(self.root),
             "oldCommit": self.old_commit,
             "newCommit": self.new_commit,
-            "newManagerVersion": "5.1.0",
+            "newManagerVersion": "5.2.0",
             "candidateSource": str(self.candidate_source),
             "carrierPath": str(self.carrier),
             "carrierSHA256": sha256(self.carrier),
@@ -401,7 +401,7 @@ class RealManagerPromotionTests(unittest.TestCase):
         self.assertEqual(result["action"], "MANAGER_PROMOTED")
         self.assertEqual(git("rev-parse", "HEAD", cwd=self.formal_source), self.new_commit)
         identity = json.loads(self._run([str(self.formal_cli), "--version"], env=self.uv_environment).stdout)
-        self.assertEqual(identity["managerVersion"], "5.1.0")
+        self.assertEqual(identity["managerVersion"], "5.2.0")
         self.assertEqual(identity["sourceCommit"], self.new_commit)
         self.assertEqual(result["health"]["status"], "PASS")
         self.assertEqual(result["health"]["mutations"], 0)
