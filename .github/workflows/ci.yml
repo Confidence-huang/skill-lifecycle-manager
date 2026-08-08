@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python 3.12 / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.12.1"
+          enable-cache: true
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - name: Sync locked environment
+        run: uv sync --frozen
+      - name: Run unit and fault-injection suite
+        run: uv run python -m unittest discover -s tests -v
+      - name: Run Skill runtime probe
+        run: uv run python tests/runtime.py
+      - name: Run Skill behavior probe
+        run: uv run python tests/behavior.py
+      - name: Validate command surface
+        run: uv run skill --help
+      - name: Build wheel and source distribution
+        run: uv build

@@ -1,0 +1,115 @@
+---
+name: skill-lifecycle-manager
+description: Manage and govern the lifecycle of Codex and cross-agent Skills on Windows and Linux with a Python 3.12 and uv CLI. Use to inventory or classify Skills, generate the canonical Registry, report evidence-backed governance, run explicit Static Runtime and Behavior verification, install or update one managed Skill transactionally, create or restore a link-aware backup, freeze a host-local stable baseline, or run zero-write health checks.
+---
+
+# Skill Lifecycle Manager
+
+Manage Skill assets as a small software supply chain. Keep desired approvals, physical inventory,
+activity entries, observed Registry state, verification evidence, and recovery material separate.
+
+## Operating rules
+
+1. Load workspace and project rules before changing Skill state.
+2. Use Python 3.12 through the committed uv project and lock file.
+3. Run the matching preview before every lifecycle mutation.
+4. Treat `PASS`, `BLOCKED`, `UNKNOWN`, `NOT_CONFIGURED`, and `NOT_RUN` literally.
+5. Mutating commands require `--apply`; never add it unless the user authorized that exact change.
+6. Never replace an existing source or activity entry. Resolve collisions separately.
+7. Keep one physical SOURCE/HYBRID entity. Linux activates it with a symbolic link; Windows uses a
+   directory junction through the platform adapter.
+8. Pin Git-backed state to a full commit. A branch is only an update channel.
+9. Verify never repairs dependencies, edits a failing Skill, changes PATH, or retries credentials.
+10. Backup records filesystem links without following them; restore requires an empty destination.
+11. Health is read-only and never fetches, installs, updates, deletes, grades, or routes.
+12. Treat Registry and baselines as host-local evidence; regenerate them after an OS migration.
+13. On Windows, do not run Phase D pilot or manager-promotion commands. The CLI blocks them until a
+    Windows-native rollback rehearsal is implemented and verified.
+
+## Command entry
+
+From the source repository:
+
+```text
+uv sync --frozen
+uv run skill --help
+```
+
+Install the reviewed checkout with `./bootstrap.sh install` on Linux or `.\bootstrap.ps1 install` in
+Windows PowerShell.
+
+## Inventory and governance
+
+```text
+skill scan
+skill registry
+skill registry --apply
+skill report --apply
+skill governance --apply
+```
+
+JSON is the canonical Registry. YAML and Markdown are generated views. Read
+[references/registry-schema.md](references/registry-schema.md) and
+[references/governance.md](references/governance.md) before consuming their fields.
+
+## Verification
+
+```text
+skill verify --name NAME
+skill verify --name NAME --apply
+skill verify --target-skill PATH --apply
+```
+
+A legacy Skill without `skill.manifest.yaml` keeps Static verification while Runtime and Behavior
+report `NOT_CONFIGURED`. Manifests use a JSON-compatible YAML subset, argument arrays, and the
+portable `{python}` placeholder. Read [references/verification-v2.md](references/verification-v2.md).
+
+## Install, update, backup, and restore
+
+```text
+skill install SOURCE --mode package
+skill install SOURCE --mode source --apply
+skill install SOURCE --mode hybrid --skill-path skills/NAME --apply
+skill update --name NAME
+skill update --name NAME --apply
+skill updates --name NAME
+skill backup --path PATH --apply
+skill restore --backup-path BACKUP --destination EMPTY_PATH --apply
+```
+
+Installation publishes Registry evidence only after required probes pass. Update never uses an
+unchecked pull or history rewrite. Restore returns link records for review instead of silently
+recreating machine-specific topology. Read [references/operations.md](references/operations.md).
+
+## Stable operation
+
+```text
+skill stabilize
+skill stabilize --apply
+skill health
+skill health --project-root PROJECT_PATH
+```
+
+An existing baseline is immutable. A deliberate rebaseline uses `--archive-existing` and preserves
+the old bytes first. Read [references/stability.md](references/stability.md).
+
+## V5 supply-chain controls
+
+The `schemas/` directory and `skill_lifecycle.contracts` implement artifact identity, desired locks,
+approval decisions, evidence, and transaction journals. `skill shadow` writes only isolated,
+non-authoritative output. Read [references/supply-chain-v5.md](references/supply-chain-v5.md) before
+extending these contracts.
+
+Linux additionally exposes reviewed Phase D pilot and exact offline manager-promotion commands.
+These operations require separately approved plans and remain outside Windows support.
+
+## Completion checks
+
+After implementation or environment changes:
+
+1. Run `uv sync --frozen` and the complete unittest suite.
+2. Run the official Skill `quick_validate.py` against this root.
+3. Run `uv build` and inspect the wheel and source distribution.
+4. Exercise preview/write pairs only against isolated roots.
+5. Review the exact diff and run credential/private-path scans before publishing.
+6. Require both Ubuntu and Windows GitHub Actions jobs for cross-platform changes.

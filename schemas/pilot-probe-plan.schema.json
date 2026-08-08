@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skill-lifecycle-manager.local/schemas/v5/pilot-probe-plan.schema.json",
+  "title": "Artifact-bound no-shell pilot probe plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "documentType", "artifactID", "skillName", "timeoutSeconds", "probes"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "documentType": {"const": "PILOT_PROBE_PLAN"},
+    "artifactID": {"$ref": "common.schema.json#/$defs/artifactID"},
+    "skillName": {"$ref": "common.schema.json#/$defs/skillName"},
+    "timeoutSeconds": {"type": "integer", "minimum": 1, "maximum": 300},
+    "probes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "command", "stdin", "expectedExitCode", "stdoutContains"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1, "maxLength": 128},
+          "command": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "maxLength": 4096}
+          },
+          "stdin": {"oneOf": [{"type": "string", "maxLength": 65536}, {"type": "null"}]},
+          "expectedExitCode": {"type": "integer", "minimum": 0, "maximum": 255},
+          "stdoutContains": {
+            "type": "array",
+            "items": {"type": "string", "maxLength": 2048}
+          }
+        }
+      }
+    }
+  }
+}

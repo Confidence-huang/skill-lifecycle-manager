@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skill-lifecycle-manager.local/schemas/v5/update-preview.schema.json",
+  "title": "Zero-write capability update preview",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "documentType",
+    "updateID",
+    "skillName",
+    "currentArtifactID",
+    "candidateArtifactID",
+    "requestedRef",
+    "resolvedCommit",
+    "ancestry",
+    "commitsAhead",
+    "fileChanges",
+    "contractChanges",
+    "riskFlags",
+    "evidenceRefs",
+    "mutations"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "documentType": {"const": "CAPABILITY_UPDATE_PREVIEW"},
+    "updateID": {"$ref": "common.schema.json#/$defs/updateID"},
+    "skillName": {"$ref": "common.schema.json#/$defs/skillName"},
+    "currentArtifactID": {"$ref": "common.schema.json#/$defs/artifactID"},
+    "candidateArtifactID": {"$ref": "common.schema.json#/$defs/artifactID"},
+    "requestedRef": {"type": "string", "minLength": 1, "maxLength": 256},
+    "resolvedCommit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "ancestry": {"enum": ["SAME", "FAST_FORWARD", "NON_FAST_FORWARD", "UNKNOWN"]},
+    "commitsAhead": {"type": "integer", "minimum": 0},
+    "fileChanges": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["added", "modified", "removed", "renamed"],
+      "properties": {
+        "added": {"$ref": "#/$defs/pathList"},
+        "modified": {"$ref": "#/$defs/pathList"},
+        "removed": {"$ref": "#/$defs/pathList"},
+        "renamed": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from", "to"],
+            "properties": {
+              "from": {"$ref": "common.schema.json#/$defs/relativePath"},
+              "to": {"$ref": "common.schema.json#/$defs/relativePath"}
+            }
+          }
+        }
+      }
+    },
+    "contractChanges": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skillEntryChanged",
+        "referencedResourcesChanged",
+        "dependenciesChanged",
+        "networkBehaviorChanged",
+        "probesChanged"
+      ],
+      "properties": {
+        "skillEntryChanged": {"type": "boolean"},
+        "referencedResourcesChanged": {"type": "boolean"},
+        "dependenciesChanged": {"type": "boolean"},
+        "networkBehaviorChanged": {"enum": ["YES", "NO", "UNKNOWN"]},
+        "probesChanged": {"type": "boolean"}
+      }
+    },
+    "riskFlags": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 256}
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "common.schema.json#/$defs/evidenceID"}
+    },
+    "mutations": {"const": 0}
+  },
+  "$defs": {
+    "pathList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "common.schema.json#/$defs/relativePath"}
+    }
+  }
+}

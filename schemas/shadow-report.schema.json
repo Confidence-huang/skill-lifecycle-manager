@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skill-lifecycle-manager.local/schemas/v5/shadow-report.schema.json",
+  "title": "Host-local Phase B shadow comparison report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "documentType",
+    "hostID",
+    "generatedAt",
+    "registrySHA256",
+    "registrySchemaVersion",
+    "registryInventoryFingerprint",
+    "inputSourceCount",
+    "summary",
+    "records",
+    "mutations"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "documentType": {"const": "AI_CAPABILITY_SHADOW_REPORT"},
+    "hostID": {"$ref": "common.schema.json#/$defs/hostID"},
+    "generatedAt": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "registrySHA256": {"$ref": "common.schema.json#/$defs/sha256"},
+    "registrySchemaVersion": {"const": 1},
+    "registryInventoryFingerprint": {"type": "string", "pattern": "^[0-9A-Fa-f]{64}$"},
+    "inputSourceCount": {"type": "integer", "minimum": 1},
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifacts", "evidence", "activeObserved", "reviewedOnly", "blocked", "unmanaged"],
+      "properties": {
+        "artifacts": {"type": "integer", "minimum": 0},
+        "evidence": {"type": "integer", "minimum": 0},
+        "activeObserved": {"type": "integer", "minimum": 0},
+        "reviewedOnly": {"type": "integer", "minimum": 0},
+        "blocked": {"type": "integer", "minimum": 0},
+        "unmanaged": {"type": "integer", "minimum": 0}
+      }
+    },
+    "records": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "name",
+          "artifactID",
+          "evidenceID",
+          "canonicalSource",
+          "repositoryPath",
+          "skillPath",
+          "resolvedCommit",
+          "lifecycleMode",
+          "suggestedActivity",
+          "observedPresence",
+          "convergenceStatus",
+          "physicalPathMatches",
+          "registryCommitMatches",
+          "registryLifecycleMatches",
+          "registryRemoteMatches",
+          "registrySourceMatches",
+          "registryScopeMatches",
+          "sourceClean",
+          "skillNameMatches",
+          "lfsPointerCount",
+          "submoduleCount",
+          "status",
+          "diagnostics",
+          "observedState"
+        ],
+        "properties": {
+          "role": {"enum": ["ACTIVE_OBSERVED", "REVIEW_ONLY"]},
+          "name": {"$ref": "common.schema.json#/$defs/skillName"},
+          "artifactID": {"$ref": "common.schema.json#/$defs/artifactID"},
+          "evidenceID": {"$ref": "common.schema.json#/$defs/evidenceID"},
+          "canonicalSource": {"type": "string", "minLength": 1, "maxLength": 4096},
+          "repositoryPath": {"type": "string", "minLength": 1, "maxLength": 4096},
+          "skillPath": {
+            "oneOf": [
+              {"const": "."},
+              {"$ref": "common.schema.json#/$defs/relativePath"}
+            ]
+          },
+          "resolvedCommit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+          "lifecycleMode": {"enum": ["PACKAGE", "SOURCE", "HYBRID"]},
+          "suggestedActivity": {"enum": ["ACTIVE", "INACTIVE"]},
+          "observedPresence": {"enum": ["PRESENT", "ABSENT"]},
+          "convergenceStatus": {"enum": ["UNMANAGED", "NOT_EVALUATED"]},
+          "physicalPathMatches": {"type": ["boolean", "null"]},
+          "registryCommitMatches": {"type": ["boolean", "null"]},
+          "registryLifecycleMatches": {"type": ["boolean", "null"]},
+          "registryRemoteMatches": {"type": ["boolean", "null"]},
+          "registrySourceMatches": {"type": ["boolean", "null"]},
+          "registryScopeMatches": {"type": ["boolean", "null"]},
+          "sourceClean": {"const": true},
+          "skillNameMatches": {"const": true},
+          "lfsPointerCount": {"const": 0},
+          "submoduleCount": {"const": 0},
+          "status": {"const": "PASS"},
+          "diagnostics": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {"type": "string", "maxLength": 2048}
+          },
+          "observedState": {
+            "oneOf": [
+              {"type": "null"},
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "status",
+                  "scope",
+                  "lifecycleMode",
+                  "physicalPath",
+                  "activePaths",
+                  "sourceRepository",
+                  "remote",
+                  "branch",
+                  "commit",
+                  "entryCount",
+                  "issues",
+                  "isTopLevel",
+                  "skillSHA256",
+                  "sourceDirty",
+                  "lifecycleSHA256",
+                  "updates"
+                ],
+                "properties": {
+                  "status": {"enum": ["PASS", "BLOCKED", "UNKNOWN"]},
+                  "scope": {"enum": ["SYSTEM", "USER", "PROJECT", "UNKNOWN"]},
+                  "lifecycleMode": {"enum": ["PACKAGE", "SOURCE", "HYBRID", "UNKNOWN"]},
+                  "physicalPath": {"type": "string", "minLength": 1},
+                  "activePaths": {"type": "array", "items": {"type": "string", "minLength": 1}},
+                  "sourceRepository": {"type": "string", "minLength": 1},
+                  "remote": {"type": ["string", "null"]},
+                  "branch": {"type": ["string", "null"]},
+                  "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                  "entryCount": {"type": "integer", "minimum": 1},
+                  "issues": {"type": "array", "items": {"type": "string"}},
+                  "isTopLevel": {"type": "boolean"},
+                  "skillSHA256": {"type": "string", "pattern": "^[0-9A-Fa-f]{64}$"},
+                  "sourceDirty": {"type": ["boolean", "null"]},
+                  "lifecycleSHA256": {
+                    "oneOf": [
+                      {"type": "null"},
+                      {"type": "string", "pattern": "^[0-9A-Fa-f]{64}$"}
+                    ]
+                  },
+                  "updates": {
+                    "oneOf": [
+                      {"type": "null"},
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["strategy", "repository", "tagPrefix", "baselineVersion", "cli"],
+                        "properties": {
+                          "strategy": {"const": "git-tags"},
+                          "repository": {"type": "string", "minLength": 1},
+                          "tagPrefix": {"type": "string", "maxLength": 64},
+                          "baselineVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+                          "cli": {
+                            "oneOf": [
+                              {"type": "null"},
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": ["command", "arguments"],
+                                "properties": {
+                                  "command": {"type": "string", "minLength": 1},
+                                  "arguments": {"type": "array", "items": {"type": "string"}}
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "mutations": {"const": 0}
+  }
+}

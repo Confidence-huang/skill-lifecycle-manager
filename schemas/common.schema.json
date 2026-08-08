@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skill-lifecycle-manager.local/schemas/v5/common.schema.json",
+  "title": "Skill lifecycle V5 common definitions",
+  "$defs": {
+    "artifactID": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "skillName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?!\\s)(?!.*\\s$)[^/\\\\\\u0000-\\u001f]+$"
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "hostID": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!\\s)(?!.*\\s$)(?!\\.\\.?$)(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*(?:^|/)\\.(?:/|$))(?!.*//)[^\\\\\\u0000-\\u001f]+$"
+    },
+    "lifecycleMode": {
+      "enum": ["PACKAGE", "SOURCE", "HYBRID", "UNKNOWN"]
+    },
+    "scope": {
+      "enum": ["SYSTEM", "USER", "PROJECT", "UNKNOWN"]
+    },
+    "evidenceID": {
+      "type": "string",
+      "pattern": "^evidence-[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "decisionID": {
+      "type": "string",
+      "pattern": "^decision-[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "updateID": {
+      "type": "string",
+      "pattern": "^update-[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "transactionID": {
+      "type": "string",
+      "pattern": "^transaction-[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "treeEntry": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "type", "size", "sha256"],
+          "properties": {
+            "path": {"$ref": "#/$defs/relativePath"},
+            "type": {"const": "FILE"},
+            "size": {"type": "integer", "minimum": 0},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "type", "linkTarget"],
+          "properties": {
+            "path": {"$ref": "#/$defs/relativePath"},
+            "type": {"const": "SYMLINK"},
+            "linkTarget": {"type": "string", "minLength": 1, "maxLength": 4096}
+          }
+        }
+      ]
+    }
+  }
+}

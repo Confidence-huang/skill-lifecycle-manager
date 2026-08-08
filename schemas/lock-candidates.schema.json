@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skill-lifecycle-manager.local/schemas/v5/lock-candidates.schema.json",
+  "title": "Non-authoritative Phase B lock candidates",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "documentType",
+    "hostID",
+    "generatedAt",
+    "policyVersion",
+    "registrySHA256",
+    "entries"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "documentType": {"const": "AI_CAPABILITY_LOCK_CANDIDATES"},
+    "hostID": {"$ref": "common.schema.json#/$defs/hostID"},
+    "generatedAt": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "policyVersion": {"type": "string", "minLength": 1, "maxLength": 128},
+    "registrySHA256": {"$ref": "common.schema.json#/$defs/sha256"},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "artifactID",
+          "suggestedLifecycleMode",
+          "suggestedActivity",
+          "targetScopes",
+          "targetAgents",
+          "approvalDecisionID",
+          "eligibility",
+          "observedPresence",
+          "convergenceStatus",
+          "reasons"
+        ],
+        "properties": {
+          "name": {"$ref": "common.schema.json#/$defs/skillName"},
+          "artifactID": {"$ref": "common.schema.json#/$defs/artifactID"},
+          "suggestedLifecycleMode": {"enum": ["PACKAGE", "SOURCE", "HYBRID"]},
+          "suggestedActivity": {"enum": ["ACTIVE", "INACTIVE"]},
+          "targetScopes": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"enum": ["SYSTEM", "USER", "PROJECT"]}
+          },
+          "targetAgents": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1, "maxLength": 64}
+          },
+          "approvalDecisionID": {"type": "null"},
+          "eligibility": {"const": "BLOCKED_MISSING_APPROVAL"},
+          "observedPresence": {"enum": ["PRESENT", "ABSENT"]},
+          "convergenceStatus": {"enum": ["UNMANAGED", "NOT_EVALUATED"]},
+          "reasons": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1, "maxLength": 2048}
+          }
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"suggestedActivity": {"const": "ACTIVE"}}},
+            "then": {
+              "properties": {
+                "observedPresence": {"const": "PRESENT"},
+                "convergenceStatus": {"const": "UNMANAGED"}
+              }
+            },
+            "else": {
+              "properties": {
+                "observedPresence": {"const": "ABSENT"},
+                "convergenceStatus": {"const": "NOT_EVALUATED"}
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

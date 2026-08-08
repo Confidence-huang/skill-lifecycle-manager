@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skill-lifecycle-manager.local/schemas/v5/approval-decision.schema.json",
+  "title": "Append-only capability approval decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "documentType",
+    "decisionID",
+    "artifactID",
+    "skillName",
+    "requestedBy",
+    "requestedAt",
+    "decision",
+    "decidedBy",
+    "decidedAt",
+    "policyVersion",
+    "evidenceRefs",
+    "reason",
+    "expiresAt",
+    "supersedesDecisionID"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "documentType": {"const": "CAPABILITY_APPROVAL_DECISION"},
+    "decisionID": {"$ref": "common.schema.json#/$defs/decisionID"},
+    "artifactID": {"$ref": "common.schema.json#/$defs/artifactID"},
+    "skillName": {"$ref": "common.schema.json#/$defs/skillName"},
+    "requestedBy": {"$ref": "common.schema.json#/$defs/actor"},
+    "requestedAt": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "decision": {"enum": ["APPROVED", "REJECTED", "REVOKED", "EXPIRED"]},
+    "decidedBy": {"$ref": "common.schema.json#/$defs/actor"},
+    "decidedAt": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "policyVersion": {"type": "string", "minLength": 1, "maxLength": 128},
+    "evidenceRefs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "common.schema.json#/$defs/evidenceID"}
+    },
+    "reason": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "expiresAt": {
+      "oneOf": [
+        {"$ref": "common.schema.json#/$defs/timestamp"},
+        {"type": "null"}
+      ]
+    },
+    "supersedesDecisionID": {
+      "oneOf": [
+        {"$ref": "common.schema.json#/$defs/decisionID"},
+        {"type": "null"}
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"decision": {"const": "APPROVED"}}},
+      "then": {"properties": {"evidenceRefs": {"minItems": 1}}}
+    },
+    {
+      "if": {"properties": {"decision": {"enum": ["REVOKED", "EXPIRED"]}}},
+      "then": {
+        "properties": {
+          "supersedesDecisionID": {"$ref": "common.schema.json#/$defs/decisionID"}
+        }
+      }
+    }
+  ]
+}

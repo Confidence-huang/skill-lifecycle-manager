@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skill-lifecycle-manager.local/schemas/v5/manager-promotion-plan.schema.json",
+  "title": "Exact offline lifecycle manager promotion plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "documentType",
+    "mode",
+    "transactionID",
+    "sandboxRoot",
+    "oldCommit",
+    "newCommit",
+    "newManagerVersion",
+    "candidateSource",
+    "carrierPath",
+    "carrierSHA256",
+    "formalSource",
+    "activityEntry",
+    "formalCLI",
+    "uvPath",
+    "uvToolDir",
+    "uvToolBinDir",
+    "uvReceipt",
+    "recoveryRoot",
+    "expectedInventoryCount",
+    "stateSHA256",
+    "authorizedBy",
+    "authorizedAt"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "documentType": {"const": "MANAGER_PROMOTION_PLAN"},
+    "mode": {"enum": ["FORMAL", "REHEARSAL"]},
+    "transactionID": {"$ref": "common.schema.json#/$defs/transactionID"},
+    "sandboxRoot": {"type": ["string", "null"]},
+    "oldCommit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "newCommit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "newManagerVersion": {"const": "5.0.0"},
+    "candidateSource": {"type": "string", "minLength": 1},
+    "carrierPath": {"type": "string", "minLength": 1},
+    "carrierSHA256": {"type": "string", "pattern": "^[0-9A-F]{64}$"},
+    "formalSource": {"type": "string", "minLength": 1},
+    "activityEntry": {"type": "string", "minLength": 1},
+    "formalCLI": {"type": "string", "minLength": 1},
+    "uvPath": {"type": "string", "minLength": 1},
+    "uvToolDir": {"type": "string", "minLength": 1},
+    "uvToolBinDir": {"type": "string", "minLength": 1},
+    "uvReceipt": {"type": "string", "minLength": 1},
+    "recoveryRoot": {"type": "string", "minLength": 1},
+    "expectedInventoryCount": {"type": "integer", "minimum": 1},
+    "stateSHA256": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skills-registry.json",
+        "skills-registry.yaml",
+        "skill-capability-report.md",
+        "skill-governance-report.md",
+        "skill-stability-baseline.json"
+      ],
+      "properties": {
+        "skills-registry.json": {"type": "string", "pattern": "^[0-9A-F]{64}$"},
+        "skills-registry.yaml": {"type": "string", "pattern": "^[0-9A-F]{64}$"},
+        "skill-capability-report.md": {"type": "string", "pattern": "^[0-9A-F]{64}$"},
+        "skill-governance-report.md": {"type": "string", "pattern": "^[0-9A-F]{64}$"},
+        "skill-stability-baseline.json": {"type": "string", "pattern": "^[0-9A-F]{64}$"}
+      }
+    },
+    "authorizedBy": {"type": "string", "minLength": 1, "maxLength": 256},
+    "authorizedAt": {"$ref": "common.schema.json#/$defs/timestamp"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"mode": {"const": "REHEARSAL"}}},
+      "then": {"properties": {"sandboxRoot": {"type": "string", "minLength": 1}}},
+      "else": {"properties": {"sandboxRoot": {"type": "null"}}}
+    }
+  ]
+}

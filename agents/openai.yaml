@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skill Lifecycle Manager"
+  short_description: "Govern Skills safely on Windows and Linux"
+  default_prompt: "Use $skill-lifecycle-manager to inventory, verify, install, update, back up, restore, or health-check Skills with explicit preview, evidence, and rollback boundaries."
