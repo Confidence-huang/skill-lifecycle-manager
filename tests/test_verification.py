@@ -13,6 +13,22 @@ from support import create_skill, layout, write_manifest
 class VerificationTests(unittest.TestCase):
     """Validate Static/Runtime/Behavior evidence without automatic repair."""
 
+    def test_python_placeholder_uses_current_interpreter(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            host = layout(root / "host")
+            skill = create_skill(root / "skill", "portable")
+            probe = {
+                "command": "{python}",
+                "arguments": ["-c", "import json; print(json.dumps({'status': 'PASS'}))"],
+                "expect": {"exitCode": 0, "stdoutJsonEquals": {"status": "PASS"}},
+            }
+            write_manifest(skill, runtime=probe, required=["static", "runtime"])
+            result = verify_target(host, skill, True)
+        runtime = next(layer for layer in result["layers"] if layer["layer"] == "runtime")
+        self.assertEqual(runtime["status"], "PASS")
+        self.assertEqual(Path(runtime["command"]).resolve(), Path(sys.executable).resolve())
+
     def test_legacy_skill_reports_not_configured(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

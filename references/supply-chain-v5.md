@@ -127,7 +127,7 @@ formal source/activity/CLI, absolute uv tool roots and receipt, five state preim
 expected physical inventory count. The repository cannot embed its own future commit or carrier hash;
 those post-commit facts belong in the external plan that the command validates before mutation.
 
-`skill --version` is zero-write and binds version `5.0.0`, source commit, and Git tree into one
+`skill --version` is zero-write and binds the installed package version, source commit, and Git tree into one
 deterministic identity hash. `manager-upgrade` accepts only a FORMAL plan and previews by default.
 `manager-rehearse` accepts failure injection only for a REHEARSAL plan whose mutable paths are below
 one disposable sandbox root.

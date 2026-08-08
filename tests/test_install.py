@@ -7,7 +7,7 @@ from pathlib import Path  # Inspect package files and activity symbolic links.
 
 from skill_lifecycle.operations import inspect_install, install_skill
 from skill_lifecycle.paths import LifecycleBlocked
-from support import create_skill, layout
+from support import create_git_skill, create_skill, layout
 
 
 class InstallTests(unittest.TestCase):
@@ -35,7 +35,7 @@ class InstallTests(unittest.TestCase):
             installed = install_skill(host, str(package), "package")
             activity = Path(installed["activityPath"])
             activity_is_directory = activity.is_dir()
-            activity_is_link = activity.is_symlink()
+            activity_is_link = host.platform.is_directory_link(activity)
             same_destination = activity.resolve() == Path(installed["destination"]).resolve()
             registry_exists = host.registry_path.is_file()
             lifecycle = json.loads((activity / ".skill-lifecycle.json").read_text(encoding="utf-8"))
@@ -45,6 +45,20 @@ class InstallTests(unittest.TestCase):
         self.assertTrue(registry_exists)
         self.assertEqual(lifecycle["lifecycleMode"], "PACKAGE")
         self.assertEqual(lifecycle["origin"], str(package))
+
+    def test_source_install_uses_the_native_activity_link(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            host = layout(root / "host")
+            source = create_git_skill(root / "source", "linked-source")
+            installed = install_skill(host, str(source), "source")
+            activity = Path(installed["activityPath"])
+            destination = Path(installed["destination"])
+            link_is_native = host.platform.is_directory_link(activity)
+            resolved_target = activity.resolve(strict=True)
+        self.assertTrue(link_is_native)
+        self.assertEqual(resolved_target, destination.resolve())
+        self.assertEqual(installed["mode"], "SOURCE")
 
     def test_package_install_preserves_valid_update_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

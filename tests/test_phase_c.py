@@ -88,6 +88,7 @@ def interrupted_transaction(created_path: str) -> dict:
     }
 
 
+@unittest.skipUnless(sys.platform.startswith("linux"), "Reviewed Phase C recovery remains Linux-only.")
 class PhaseCBehaviorTests(unittest.TestCase):
     """Prove interruption, rollback, collision, approval, and canary boundaries."""
 
@@ -173,9 +174,10 @@ class PhaseCBehaviorTests(unittest.TestCase):
             git("commit", "-m", "phase c update", cwd=publisher)
             git("push", "origin", "main", cwd=publisher)
 
-            with patch("skill_lifecycle.operations.write_registry", side_effect=OSError("injected final write failure")):
-                with self.assertRaises(OSError):
-                    update_skill(host, "updatable", True)
+            with patch("skill_lifecycle.guardian.require_guardian_approval", return_value={}):
+                with patch("skill_lifecycle.operations.write_registry", side_effect=OSError("injected final write failure")):
+                    with self.assertRaises(OSError):
+                        update_skill(host, "updatable", True)
 
             self.assertEqual(git("rev-parse", "HEAD", cwd=managed), prior_commit)
             self.assertEqual(git("status", "--porcelain=v1", cwd=managed), "")

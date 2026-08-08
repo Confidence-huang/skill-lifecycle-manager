@@ -22,7 +22,7 @@ from support import create_git_skill, create_skill
 from test_contracts import load_schemas
 
 
-REMOTE = "https://example.invalid/oil-tone.git"  # A local fixture remote never requires network access.
+REMOTE = "https://example.invalid/pilot-example.git"  # A local fixture remote never requires network access.
 EVIDENCE_ID = "evidence-11111111-1111-4111-8111-111111111111"
 APPROVAL_ID = "decision-11111111-1111-4111-8111-111111111111"
 REVOCATION_ID = "decision-22222222-2222-4222-8222-222222222222"
@@ -46,7 +46,7 @@ def artifact_evidence(root: Path, repository: Path) -> tuple[Path, Path, str]:
         "schemaVersion": 1,
         "documentType": "CAPABILITY_ARTIFACT_MANIFEST",
         "artifactID": artifact_id,
-        "skillName": "oil-tone",
+        "skillName": "pilot-example",
         "identity": identity,
         "treeEntries": tree,
     }
@@ -59,7 +59,7 @@ def artifact_evidence(root: Path, repository: Path) -> tuple[Path, Path, str]:
         "documentType": "CAPABILITY_EVIDENCE",
         "evidenceID": EVIDENCE_ID,
         "artifactID": artifact_id,
-        "skillName": "oil-tone",
+        "skillName": "pilot-example",
         "kind": "PROVENANCE",
         "tool": "phase-d-fixture",
         "toolVersion": "1",
@@ -89,6 +89,7 @@ def subprocess_git(repository: Path, *arguments: str) -> str:
         raise AssertionError(completed.stderr)
     return completed.stdout.strip()
 
+@unittest.skipUnless(sys.platform.startswith("linux"), "Reviewed Phase D activation remains Linux-only.")
 class PhaseDPilotTests(unittest.TestCase):
     """Exercise approval, collision, interruption, verification, exact restoration, and retry."""
 
@@ -110,7 +111,7 @@ class PhaseDPilotTests(unittest.TestCase):
         create_skill(host.activity_root / "canary", "canary")
         governance_result(host, True)
         host.baseline_path.write_text('{"frozen":true}\n', encoding="utf-8")
-        repository = create_git_skill(root / "publisher", "oil-tone", REMOTE)
+        repository = create_git_skill(root / "publisher", "pilot-example", REMOTE)
         manifest_path, evidence_path, artifact_id = artifact_evidence(root, repository)
         approval = {
             "manifestPath": manifest_path,
@@ -223,7 +224,7 @@ class PhaseDPilotTests(unittest.TestCase):
         self.assertEqual(rolled_back["action"], "PILOT_ROLLED_BACK")
         self.assertEqual(retry["action"], "PILOT_ROLLBACK_ALREADY_COMPLETE")
         self.assertEqual(before, after)
-        self.assertFalse((host.activity_root / "oil-tone").exists())
+        self.assertFalse((host.activity_root / "pilot-example").exists())
         self.assertEqual(lock["entries"][0]["desiredActivity"], "INACTIVE")
         self.assertEqual([item["entries"][0]["desiredActivity"] for item in lock_revisions], ["ACTIVE", "INACTIVE"])
         for lock_revision in lock_revisions:
@@ -256,7 +257,7 @@ class PhaseDPilotTests(unittest.TestCase):
                 root = Path(temporary)
                 fixture = self.fixture(root)
                 host = fixture["host"]
-                activity = host.activity_root / "oil-tone"
+                activity = host.activity_root / "pilot-example"
                 if link_collision:
                     existing = create_skill(root / "existing", "existing")
                     try:
@@ -294,7 +295,7 @@ class PhaseDPilotTests(unittest.TestCase):
                 self.assertTrue(start_exists)
                 self.assertEqual(after, before)
                 self.assertTrue((host.activity_root / "canary/SKILL.md").is_file())
-                self.assertFalse((host.activity_root / "oil-tone").exists())
+                self.assertFalse((host.activity_root / "pilot-example").exists())
 
     # --- Retain a failed probe and still restore exact state ---
     def test_probe_failure_is_recorded_before_explicit_rollback(self) -> None:
@@ -347,7 +348,7 @@ def write_probe_plan(root: Path, artifact_id: str, *, passes: bool) -> Path:
         "schemaVersion": 1,
         "documentType": "PILOT_PROBE_PLAN",
         "artifactID": artifact_id,
-        "skillName": "oil-tone",
+        "skillName": "pilot-example",
         "timeoutSeconds": 30,
         "probes": [
             {

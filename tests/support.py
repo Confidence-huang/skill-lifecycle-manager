@@ -1,4 +1,4 @@
-"""Deterministic Linux fixtures shared by the lifecycle command tests."""
+"""Deterministic cross-platform fixtures shared by lifecycle command tests."""
 
 from __future__ import annotations  # Keep helper annotations stable on Python 3.12.
 
@@ -12,6 +12,13 @@ from skill_lifecycle.paths import HostLayout  # Give each test fully isolated li
 def layout(root: Path) -> HostLayout:
     """Create a host layout whose every mutation stays below one disposable directory."""
     return HostLayout(root / "activity", root / "data", root / "state", root / "cache")
+
+
+def link_directory(host: HostLayout, target: Path, link: Path) -> Path:
+    """Create the current host's activity primitive and return its path."""
+    link.parent.mkdir(parents=True, exist_ok=True)
+    host.platform.create_directory_link(target, link)
+    return link
 
 
 def create_skill(root: Path, name: str, body: str = "# Test Skill\n") -> Path:
@@ -55,7 +62,7 @@ def create_git_skill(root: Path, name: str, remote: str | None = None) -> Path:
     create_skill(root, name)
     git("init", "-b", "main", cwd=root)
     git("config", "user.name", "Fixture", cwd=root)
-    git("config", "user.email", "fixture@localhost", cwd=root)
+    git("config", "user.email", "fixture@example.invalid", cwd=root)
     git("add", "--", "SKILL.md", cwd=root)
     git("commit", "-m", "initial", cwd=root)
     if remote:

@@ -117,7 +117,7 @@ class SupplyChainContractTests(unittest.TestCase):
         first_id = compute_artifact_id(identity)  # The normalized seven-field object is accepted.
         self.assertRegex(first_id, r"^sha256:[0-9a-f]{64}$")
         with self.assertRaises(ContractBlocked):
-            compute_artifact_id({**identity, "physicalPath": "/home/a/.agents/skills/oil-visual"})
+            compute_artifact_id({**identity, "physicalPath": "/users/example/.agents/skills/oil-visual"})
         with self.assertRaises(ContractBlocked):
             compute_artifact_id({**identity, "approved": True})
 

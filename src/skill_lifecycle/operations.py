@@ -1,5 +1,5 @@
 """
-Transactional install, update, backup, and restore operations for Linux Skill assets.
+Transactional install, update, backup, and restore operations for Windows and Linux Skill assets.
 
 Every mutation follows the same visible sequence: inspect the explicit request, prove the target and
 collision boundary, change only transaction-owned paths, publish Registry evidence last, and return
@@ -9,7 +9,7 @@ the exact effect. Preview paths perform the same inspection without creating liv
 from __future__ import annotations  # Keep annotations stable on Python 3.12.
 
 import json  # Read canonical Registry and completed backup manifests.
-import os  # Create and inspect native symbolic links.
+import os  # Walk physical trees without following directory links.
 import re  # Prevent frontmatter names from becoming unsafe path segments.
 import shutil  # Preserve physical package files and executable metadata.
 import subprocess  # Run Git through argument arrays rather than shell command strings.
@@ -20,6 +20,7 @@ from typing import Any, Iterable  # Describe command feedback and explicit path 
 
 from skill_lifecycle.inventory import read_package_record, read_skill, write_registry  # Validate entries, PACKAGE provenance, and final Registry evidence.
 from skill_lifecycle.paths import HostLayout, LifecycleBlocked, atomic_json, sha256_file  # Enforce shared stop gates.
+from skill_lifecycle.platforms import current_platform
 
 
 def run_git(path: Path | None, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -75,11 +76,11 @@ def inspect_install(layout: HostLayout, source: str, mode: str, skill_path: str 
         activity = layout.activity_root / name
         owner = layout.activity_root if selected == "package" else layout.data_root / "sources"
         destination = activity if selected == "package" else owner / name
-        if destination.exists() or destination.is_symlink():
+        if layout.platform.link_exists(destination):
             raise LifecycleBlocked(f"Destination already exists: {destination}")
-        if activity != destination and (activity.exists() or activity.is_symlink()):
+        if activity != destination and layout.platform.link_exists(activity):
             raise LifecycleBlocked(f"Activity entry already exists: {activity}")
-        relative_skill = candidate.relative_to(staged)
+        relative_skill = candidate.relative_to(staged.resolve(strict=True))
         return {
             "status": "PASS",
             "action": "INSTALL_PREVIEW",
@@ -113,7 +114,7 @@ def install_skill(layout: HostLayout, source: str, mode: str = "auto", skill_pat
             if completed.returncode:
                 raise LifecycleBlocked(f"Git clone failed: {completed.stderr.strip()}")
         candidate = find_candidate(staged, skill_path)
-        relative_skill = candidate.relative_to(staged)
+        relative_skill = candidate.relative_to(staged.resolve(strict=True))
         candidate_updates = None  # SOURCE/HYBRID entries never consume PACKAGE-only provenance.
         if selected == "package":
             candidate_package, _, package_issues = read_package_record(candidate)  # Preserve only a validated optional update channel.
@@ -145,7 +146,7 @@ def install_skill(layout: HostLayout, source: str, mode: str = "auto", skill_pat
                 installed_skill = destination / relative_skill
                 created_destination = destination
                 layout.activity_root.mkdir(parents=True, exist_ok=True)
-                os.symlink(installed_skill, activity, target_is_directory=True)  # SOURCE/HYBRID expose the validated source.
+                layout.platform.create_directory_link(installed_skill, activity)
                 created_activity = activity
 
             from skill_lifecycle.verification import verify_target  # Delay import to keep command modules acyclic.
@@ -155,8 +156,8 @@ def install_skill(layout: HostLayout, source: str, mode: str = "auto", skill_pat
                 raise LifecycleBlocked(f"Install verification blocked: {verification.get('reportPath')}")
             registry = write_registry(layout, [layout.activity_root])  # Publish only after activation and probes pass.
         except BaseException:  # Interruption-style failures still clean only paths created above.
-            if created_activity and created_activity.is_symlink():
-                created_activity.unlink()  # Remove only this transaction's activation alias.
+            if created_activity and layout.platform.is_directory_link(created_activity):
+                layout.platform.remove_directory_link(created_activity)
             if created_destination and created_destination.exists():
                 shutil.rmtree(created_destination)  # Preserve every pre-existing neighboring Skill.
             if layout.activity_root.is_dir() and not any(layout.activity_root.iterdir()):
@@ -197,7 +198,13 @@ def registry_record(layout: HostLayout, name: str) -> dict[str, Any]:
     return record
 
 
-def update_skill(layout: HostLayout, name: str, apply: bool) -> dict[str, Any]:
+def update_skill(
+    layout: HostLayout,
+    name: str,
+    apply: bool,
+    approval_path: Path | None = None,
+    evaluated_at: str | None = None,
+) -> dict[str, Any]:
     """Preview remote identity or apply one validated fast-forward source update."""
     record = registry_record(layout, name)
     repository = Path(record["sourceRepository"]).resolve(strict=True)
@@ -215,6 +222,17 @@ def update_skill(layout: HostLayout, name: str, apply: bool) -> dict[str, Any]:
     preview = {"status": "PASS", "action": "UPDATE_PREVIEW", "name": name, "current": current, "candidate": candidate, "mutations": 0}
     if not apply or candidate == current:
         return preview
+
+    from skill_lifecycle.guardian import require_guardian_approval  # Delay import so scanning can reuse Git without a module cycle.
+
+    require_guardian_approval(
+        layout,
+        approval_path,
+        name,
+        current,
+        candidate,
+        evaluated_at,
+    )  # Human authority is proved before fetch creates even local candidate objects.
 
     fetched = run_git(repository, "fetch", "--no-tags", "origin", branch)
     if fetched.returncode:
@@ -256,18 +274,21 @@ def backup_preview(layout: HostLayout, paths: Iterable[Path]) -> dict[str, Any]:
     file_count = 0
     link_count = 0
     for source in sources:
-        if not source.exists() and not source.is_symlink():
+        if not layout.platform.link_exists(source):
             raise LifecycleBlocked(f"Backup source is missing: {source}")
-        if not source.is_symlink() and not source.is_dir():
+        if not layout.platform.is_directory_link(source) and not source.is_dir():
             raise LifecycleBlocked(f"Backup source must be a directory or symbolic link: {source}")
-        if not source.is_symlink() and resolved_backup_root.is_relative_to(source.resolve()):
+        if not layout.platform.is_directory_link(source) and resolved_backup_root.is_relative_to(source.resolve()):
             raise LifecycleBlocked(f"Backup source contains the backup destination and would recurse: {source}")
-        if source.is_symlink():
+        if layout.platform.is_directory_link(source):
             link_count += 1
             continue
         for directory, child_directories, child_files in os.walk(source, followlinks=False):
             directory_path = Path(directory)
-            linked_directories = [name for name in child_directories if (directory_path / name).is_symlink()]
+            linked_directories = [
+                name for name in child_directories
+                if layout.platform.is_directory_link(directory_path / name)
+            ]
             link_count += len(linked_directories)
             child_directories[:] = [name for name in child_directories if name not in linked_directories]
             for child in child_files:
@@ -291,8 +312,8 @@ def create_backup(layout: HostLayout, paths: Iterable[Path]) -> dict[str, Any]:
     links: list[dict[str, str]] = []
     for index, source in enumerate(sources):
         slot = destination / f"root-{index:03d}-{source.name}"
-        if source.is_symlink():
-            links.append({"source": str(source), "target": os.readlink(source), "backupRelative": str(slot.relative_to(destination))})
+        if layout.platform.is_directory_link(source):
+            links.append({"source": str(source), "target": layout.platform.link_target(source), "backupRelative": str(slot.relative_to(destination))})
             continue
         slot.mkdir(parents=True)
         for directory, child_directories, child_files in os.walk(source, followlinks=False):
@@ -302,8 +323,8 @@ def create_backup(layout: HostLayout, paths: Iterable[Path]) -> dict[str, Any]:
             target_directory.mkdir(parents=True, exist_ok=True)
             for child in list(child_directories):
                 child_path = directory_path / child
-                if child_path.is_symlink():
-                    links.append({"source": str(child_path), "target": os.readlink(child_path), "backupRelative": str((target_directory / child).relative_to(destination))})
+                if layout.platform.is_directory_link(child_path):
+                    links.append({"source": str(child_path), "target": layout.platform.link_target(child_path), "backupRelative": str((target_directory / child).relative_to(destination))})
                     child_directories.remove(child)
             for child in child_files:
                 source_file = directory_path / child
@@ -325,7 +346,7 @@ def validate_restore(backup_path: Path, destination: Path) -> tuple[Path, Path, 
     if not manifest_path.is_file():
         raise LifecycleBlocked(f"Backup manifest is missing: {manifest_path}")
     target = Path(destination).expanduser()
-    if target.is_symlink():
+    if current_platform().is_directory_link(target):
         raise LifecycleBlocked(f"Restore destination must be a physical directory: {target}")
     if target.exists() and (not target.is_dir() or any(target.iterdir())):
         raise LifecycleBlocked(f"Restore destination is not empty: {target}")

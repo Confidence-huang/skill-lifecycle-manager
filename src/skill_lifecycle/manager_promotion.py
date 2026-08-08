@@ -132,8 +132,8 @@ def _validate_plan_shape(plan: dict[str, Any]) -> None:
             raise LifecycleBlocked(f"Promotion plan {field} must be one full lowercase commit.")
     if plan["oldCommit"] == plan["newCommit"]:
         raise LifecycleBlocked("Promotion old and new commits must differ.")
-    if plan["newManagerVersion"] != "5.0.0":
-        raise LifecycleBlocked("Promotion successor version must be exactly 5.0.0.")
+    if plan["newManagerVersion"] != "5.2.0":
+        raise LifecycleBlocked("Promotion successor version must be exactly 5.2.0.")
     if not isinstance(plan["expectedInventoryCount"], int) or isinstance(plan["expectedInventoryCount"], bool) or plan["expectedInventoryCount"] < 1:
         raise LifecycleBlocked("Promotion expectedInventoryCount must be a positive integer.")
     if not isinstance(plan["authorizedBy"], str) or not plan["authorizedBy"].strip():
@@ -540,8 +540,6 @@ def execute_manager_promotion(
         health_result = _json_command(_manager_command(plan, host, "health"), environment=environment)
         if health_result.get("status") != "PASS" or health_result.get("mutations") != 0:
             raise LifecycleBlocked("Promoted manager health did not pass with zero mutations.")
-        if (host.activity_root / "oil-tone").exists() or (host.activity_root / "oil-tone").is_symlink():
-            raise LifecycleBlocked("Promotion acceptance found forbidden oil-tone activity.")
         steps.append({"name": "accept", "status": "PASS"})
         atomic_json(transaction_path, _transaction_record(plan, "PROMOTED", steps))
         return {

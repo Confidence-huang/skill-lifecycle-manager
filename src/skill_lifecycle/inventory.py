@@ -14,10 +14,11 @@ import os  # Walk Skill trees without following symbolic-link directories.
 import re  # Validate stable semantic versions and bounded tag prefixes in PACKAGE update contracts.
 import subprocess  # Query Git identity without a shell command string.
 from datetime import datetime, timezone  # Timestamp completed evidence in UTC.
-from pathlib import Path  # Preserve Linux case-sensitive path identity.
+from pathlib import Path  # Preserve native host path identity.
 from typing import Any, Iterable  # Describe the structured Registry data flow.
 
 from skill_lifecycle.paths import HostLayout, atomic_json, atomic_text, sha256_file  # Publish verified state safely.
+from skill_lifecycle.platforms import current_platform
 
 
 GENERATOR = "skill-lifecycle-manager/4.1.0"  # Identify Registries that include PACKAGE freshness contracts.
@@ -132,13 +133,14 @@ def read_package_record(skill_root: Path) -> tuple[dict[str, Any] | None, str | 
 
 
 def walk_skill_files(entry: Path) -> Iterable[Path]:
-    """Yield physical SKILL.md files without entering nested filesystem links."""
+    """Yield physical SKILL.md files without entering nested directory links."""
+    platform = current_platform()
     target = entry.resolve(strict=True)  # Broken activity links are captured by the caller.
     if target.is_file():
         return  # A top-level file cannot expose a Skill directory.
     for directory, child_directories, files in os.walk(target, followlinks=False):
         child_directories[:] = [
-            name for name in child_directories if not (Path(directory) / name).is_symlink()
+            name for name in child_directories if not platform.is_directory_link(Path(directory) / name)
         ]  # Nested activity aliases are evidence, never traversal requests.
         if "SKILL.md" in files:
             yield Path(directory) / "SKILL.md"
@@ -254,7 +256,8 @@ def inventory_fingerprint(records: list[dict[str, Any]]) -> str:
 
 
 def scan_skills(activity_roots: Iterable[Path]) -> dict[str, Any]:
-    """Inventory exact Linux Skill identities without changing any scanned path."""
+    """Inventory exact host Skill identities without changing any scanned path."""
+    platform = current_platform()
     roots = [Path(root).expanduser().resolve() for root in activity_roots]
     records_by_file: dict[str, dict[str, Any]] = {}  # Physical SKILL.md identity deduplicates aliases.
     broken_links: list[str] = []
@@ -262,7 +265,7 @@ def scan_skills(activity_roots: Iterable[Path]) -> dict[str, Any]:
         if not root.exists():
             continue  # An absent optional root contributes no invented assets.
         for entry in sorted(root.iterdir(), key=lambda item: item.name):
-            if entry.is_symlink() and not entry.exists():
+            if platform.is_directory_link(entry) and not entry.exists():
                 broken_links.append(str(entry))  # Preserve the unusable activation as explicit evidence.
                 continue
             if not entry.is_dir():
@@ -277,7 +280,7 @@ def scan_skills(activity_roots: Iterable[Path]) -> dict[str, Any]:
                     git = git_identity(physical_file.parent)
                     package, lifecycle_hash, package_issues = read_package_record(physical_file.parent)
                     issues.extend(package_issues)  # Malformed provenance degrades evidence instead of disappearing.
-                    is_link = entry.is_symlink()
+                    is_link = platform.is_directory_link(entry)
                     if git["repository"]:
                         mode = "HYBRID" if git["entryCount"] > 1 else "SOURCE"
                     else:
@@ -330,7 +333,7 @@ def scan_skills(activity_roots: Iterable[Path]) -> dict[str, Any]:
         "schemaVersion": 1,
         "generatedAt": utc_now(),
         "generator": GENERATOR,
-        "platform": "linux",
+        "platform": platform.name,
         "roots": [str(root) for root in roots],
         "summary": {
             "total": len(records),

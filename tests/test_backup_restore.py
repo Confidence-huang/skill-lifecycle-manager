@@ -1,6 +1,7 @@
 """Prove preview, physical hashing, link recording, and safe empty restore."""
 
 import json  # Inspect the completed version-1 backup manifest.
+import sys  # Separate POSIX file-link coverage from portable physical backup coverage.
 import tempfile  # Keep recovery fixtures disposable.
 import unittest  # Run without third-party dependencies.
 from pathlib import Path  # Create executable files and symbolic links.
@@ -13,6 +14,7 @@ from support import layout
 class BackupRestoreTests(unittest.TestCase):
     """Validate that backup never follows links and restore never recreates them."""
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "File symlink fixture is POSIX-specific.")
     def test_backup_preview_counts_without_creating_backup_root(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -26,6 +28,7 @@ class BackupRestoreTests(unittest.TestCase):
         self.assertEqual((result["fileCount"], result["linkCount"]), (1, 1))
         self.assertFalse(backup_exists)
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "File mode/link fixture is POSIX-specific.")
     def test_link_aware_backup_and_empty_restore(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -50,6 +51,7 @@ def tree_snapshot(root: Path) -> dict[str, tuple[str, str]]:
     return snapshot
 
 
+@unittest.skipUnless(sys.platform.startswith("linux"), "Manager promotion recovery remains Linux-only.")
 class ManagerPromotionTests(unittest.TestCase):
     """Build a complete but minimal promotion host beneath one temporary sandbox."""
 
@@ -61,7 +63,7 @@ class ManagerPromotionTests(unittest.TestCase):
         self.repository.mkdir()
         git("init", "-b", "main", cwd=self.repository)
         git("config", "user.name", "Fixture", cwd=self.repository)
-        git("config", "user.email", "fixture@localhost", cwd=self.repository)
+        git("config", "user.email", "fixture@example.invalid", cwd=self.repository)
         (self.repository / "SKILL.md").write_text(
             "---\nname: skill-lifecycle-manager\ndescription: old fixture\n---\n",
             encoding="utf-8",
@@ -134,7 +136,7 @@ class ManagerPromotionTests(unittest.TestCase):
             "sandboxRoot": str(self.root),
             "oldCommit": self.old_commit,
             "newCommit": self.new_commit,
-            "newManagerVersion": "5.0.0",
+            "newManagerVersion": "5.2.0",
             "candidateSource": str(self.repository),
             "carrierPath": str(self.carrier),
             "carrierSHA256": sha256(self.carrier),
@@ -168,7 +170,7 @@ class ManagerPromotionTests(unittest.TestCase):
         self.assertEqual(result["action"], "MANAGER_PROMOTION_PREVIEW")
         self.assertEqual(result["oldCommit"], self.old_commit)
         self.assertEqual(result["newCommit"], self.new_commit)
-        self.assertEqual(result["managerVersion"], "5.0.0")
+        self.assertEqual(result["managerVersion"], "5.2.0")
         self.assertEqual(result["mutations"], 0)
         self.assertEqual(tree_snapshot(self.root), before)
 
@@ -234,6 +236,7 @@ class ManagerPromotionTests(unittest.TestCase):
         self.assertEqual(tree_snapshot(self.root), before)
 
 
+@unittest.skipUnless(sys.platform.startswith("linux"), "Manager promotion recovery remains Linux-only.")
 class RealManagerPromotionTests(unittest.TestCase):
     """Promote the actual old manager package inside disposable uv and XDG roots."""
 
@@ -244,19 +247,35 @@ class RealManagerPromotionTests(unittest.TestCase):
         current_repository = Path(__file__).resolve().parents[1]
         self.candidate_source = self.root / "candidate-source"
         external_carrier = os.environ.get("SLM_REHEARSAL_CARRIER")
-        clone_source = Path(external_carrier).resolve(strict=True) if external_carrier else current_repository
-        git("clone", str(clone_source), str(self.candidate_source), cwd=self.root)
-        expected_new = os.environ.get("SLM_REHEARSAL_NEW_COMMIT")
-        if expected_new:
-            git("checkout", "--detach", expected_new, cwd=self.candidate_source)
-        self.new_commit = git("rev-parse", "HEAD", cwd=self.candidate_source)
-        self.old_commit = os.environ.get(
-            "SLM_REHEARSAL_OLD_COMMIT",
-            "564215ba6c82927fc8ba2a9fc8943a6adef2e3ee",
-        )
         if external_carrier:
+            git("clone", str(Path(external_carrier).resolve(strict=True)), str(self.candidate_source), cwd=self.root)
+            expected_new = os.environ.get("SLM_REHEARSAL_NEW_COMMIT")
+            if expected_new:
+                git("checkout", "--detach", expected_new, cwd=self.candidate_source)
+            self.new_commit = git("rev-parse", "HEAD", cwd=self.candidate_source)
+            self.old_commit = os.environ["SLM_REHEARSAL_OLD_COMMIT"]
             self.carrier = Path(external_carrier).resolve(strict=True)
         else:
+            shutil.copytree(
+                current_repository,
+                self.candidate_source,
+                ignore=shutil.ignore_patterns(".git", ".venv", "dist", "build", "__pycache__", "*.pyc"),
+            )
+            git("init", "-b", "main", cwd=self.candidate_source)
+            git("config", "user.name", "Fixture", cwd=self.candidate_source)
+            git("config", "user.email", "fixture@example.invalid", cwd=self.candidate_source)
+            init_path = self.candidate_source / "src/skill_lifecycle/__init__.py"
+            project_path = self.candidate_source / "pyproject.toml"
+            init_path.write_text(init_path.read_text(encoding="utf-8").replace('5.2.0', '5.0.0'), encoding="utf-8")
+            project_path.write_text(project_path.read_text(encoding="utf-8").replace('5.2.0', '5.0.0'), encoding="utf-8")
+            git("add", "--all", cwd=self.candidate_source)
+            git("commit", "-m", "fixture old manager", cwd=self.candidate_source)
+            self.old_commit = git("rev-parse", "HEAD", cwd=self.candidate_source)
+            init_path.write_text(init_path.read_text(encoding="utf-8").replace('5.0.0', '5.2.0'), encoding="utf-8")
+            project_path.write_text(project_path.read_text(encoding="utf-8").replace('5.0.0', '5.2.0'), encoding="utf-8")
+            git("add", "--all", cwd=self.candidate_source)
+            git("commit", "-m", "fixture new manager", cwd=self.candidate_source)
+            self.new_commit = git("rev-parse", "HEAD", cwd=self.candidate_source)
             self.carrier = self.root / "manager.bundle"
             git("bundle", "create", str(self.carrier), "--all", cwd=self.candidate_source)
 
@@ -267,7 +286,10 @@ class RealManagerPromotionTests(unittest.TestCase):
         self.activity = self.host.activity_root / "skill-lifecycle-manager"
         self.activity.symlink_to(self.formal_source, target_is_directory=True)
 
-        self.uv_path = Path(os.environ.get("SLM_REHEARSAL_UV", "/home/a/.local/bin/uv"))
+        uv_executable = os.environ.get("SLM_REHEARSAL_UV") or shutil.which("uv")
+        if not uv_executable:
+            self.skipTest("uv is required for the offline manager-promotion rehearsal.")
+        self.uv_path = Path(uv_executable)
         self.tool_dir = self.root / "uv-tools"
         self.tool_bin = self.root / "tool-bin"
         self.uv_environment = {
@@ -319,7 +341,7 @@ class RealManagerPromotionTests(unittest.TestCase):
             "sandboxRoot": str(self.root),
             "oldCommit": self.old_commit,
             "newCommit": self.new_commit,
-            "newManagerVersion": "5.0.0",
+            "newManagerVersion": "5.2.0",
             "candidateSource": str(self.candidate_source),
             "carrierPath": str(self.carrier),
             "carrierSHA256": sha256(self.carrier),
@@ -379,7 +401,7 @@ class RealManagerPromotionTests(unittest.TestCase):
         self.assertEqual(result["action"], "MANAGER_PROMOTED")
         self.assertEqual(git("rev-parse", "HEAD", cwd=self.formal_source), self.new_commit)
         identity = json.loads(self._run([str(self.formal_cli), "--version"], env=self.uv_environment).stdout)
-        self.assertEqual(identity["managerVersion"], "5.0.0")
+        self.assertEqual(identity["managerVersion"], "5.2.0")
         self.assertEqual(identity["sourceCommit"], self.new_commit)
         self.assertEqual(result["health"]["status"], "PASS")
         self.assertEqual(result["health"]["mutations"], 0)

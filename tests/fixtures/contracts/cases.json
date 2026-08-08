@@ -240,7 +240,7 @@
           "unknown": 0
         },
         "reportSHA256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "reportPath": "/home/a/private-report.json",
+        "reportPath": "/users/example/private-report.json",
         "diagnostics": []
       }
     },

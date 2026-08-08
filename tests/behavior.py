@@ -1,8 +1,8 @@
-"""Behavior probe: scan one isolated Skill and prove Linux physical identity."""
+"""Behavior probe: scan one isolated Skill and prove native physical identity."""
 
 import json  # Return one bounded machine-readable behavior result.
 import tempfile  # Prevent the representative scan from touching live activity or state roots.
-from pathlib import Path  # Create native POSIX fixture paths.
+from pathlib import Path  # Create native host fixture paths.
 
 from skill_lifecycle.inventory import scan_skills  # Exercise the real installed inventory command.
 

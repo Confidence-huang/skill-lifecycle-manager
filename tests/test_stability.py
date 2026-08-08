@@ -9,7 +9,7 @@ from skill_lifecycle.inventory import governance_result
 from skill_lifecycle.operations import create_backup
 from skill_lifecycle.paths import LifecycleBlocked
 from skill_lifecycle.stability import health, stabilize
-from support import create_git_skill, layout
+from support import create_git_skill, layout, link_directory
 
 
 def prepared_host(root: Path):
@@ -17,7 +17,7 @@ def prepared_host(root: Path):
     host = layout(root / "host")
     manager = create_git_skill(root / "manager", "skill-lifecycle-manager")
     host.activity_root.mkdir(parents=True)
-    (host.activity_root / "skill-lifecycle-manager").symlink_to(manager, target_is_directory=True)
+    link_directory(host, manager, host.activity_root / "skill-lifecycle-manager")
     governance_result(host, True)
     create_backup(host, [manager, host.activity_root])
     return host, manager
@@ -38,11 +38,13 @@ class StabilityTests(unittest.TestCase):
     def test_stable_baseline_uses_the_structured_manager_identity(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             host, manager = prepared_host(Path(temporary))
+            expected_repository = str(manager.resolve(strict=True))
             with patch("skill_lifecycle.stability.manager_repository", return_value=manager):
                 result = stabilize(host, False, False)
 
         manager_record = result["baseline"]["manager"]
-        self.assertEqual(manager_record["version"], "5.0.0")
+        self.assertEqual(manager_record["repository"], expected_repository)
+        self.assertEqual(manager_record["version"], "5.2.0")
         self.assertRegex(manager_record["sourceTree"], r"^[0-9a-f]{40}$")
         self.assertRegex(manager_record["identitySHA256"], r"^[0-9A-F]{64}$")
 

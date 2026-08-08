@@ -1,35 +1,39 @@
-"""Prove Linux inventory identity, Registry preview/apply, and generated governance views."""
+"""Prove cross-platform inventory identity and generated governance views."""
 
 import tempfile  # Dispose every activity and state fixture after each assertion.
 import unittest  # Keep acceptance dependency-free under uv.
-from pathlib import Path  # Create native case-sensitive files and symbolic links.
+import sys  # Keep broken-symlink evidence distinct from Windows junction coverage.
+from pathlib import Path  # Create native files and activity entries.
 
 from skill_lifecycle.inventory import governance_result, registry_result, report_result, scan_skills, write_registry
-from support import create_skill, layout, write_lifecycle_record  # Reuse deterministic Skill and PACKAGE provenance fixtures.
+from support import create_skill, layout, link_directory, write_lifecycle_record
 
 
 class InventoryTests(unittest.TestCase):
     """Validate physical identity and evidence publication boundaries."""
 
-    def test_aliases_deduplicate_and_case_distinct_entries_remain_distinct(self) -> None:
+    def test_aliases_deduplicate_and_distinct_entries_remain_distinct(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            activity = root / "activity"
+            host = layout(root / "host")
+            activity = host.activity_root
             source = create_skill(root / "source/alpha", "alpha")
-            activity.mkdir()
-            (activity / "alpha").symlink_to(source, target_is_directory=True)
-            (activity / "alpha-alias").symlink_to(source, target_is_directory=True)
-            create_skill(activity / "Alpha", "Alpha")
+            activity.mkdir(parents=True)
+            link_directory(host, source, activity / "alpha")
+            link_directory(host, source, activity / "alpha-alias")
+            create_skill(activity / "beta", "beta")
             inventory = scan_skills([activity])
         self.assertEqual(inventory["summary"]["inventory"]["physicalEntries"], 2)
-        self.assertEqual({record["name"] for record in inventory["skills"]}, {"alpha", "Alpha"})
+        self.assertEqual({record["name"] for record in inventory["skills"]}, {"alpha", "beta"})
         self.assertEqual(len(next(record for record in inventory["skills"] if record["name"] == "alpha")["activePaths"]), 2)
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Broken symbolic-link evidence is POSIX-specific.")
     def test_broken_link_is_visible_without_following_it(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            activity = Path(temporary) / "activity"
-            activity.mkdir()
-            (activity / "broken").symlink_to(activity / "missing", target_is_directory=True)
+            host = layout(Path(temporary) / "host")
+            activity = host.activity_root
+            activity.mkdir(parents=True)
+            link_directory(host, activity / "missing", activity / "broken")
             inventory = scan_skills([activity])
         self.assertEqual(inventory["summary"]["brokenLinks"], 1)
         self.assertEqual(inventory["skills"], [])

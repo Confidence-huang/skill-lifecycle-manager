@@ -1,6 +1,7 @@
 """Prove configured PACKAGE release checks are semantic, bounded, and zero-write."""
 
 import json  # Snapshot canonical Registry bytes around read-only checks.
+import sys  # Run the portable CLI fixture through the current interpreter.
 import tempfile  # Keep package and Git-tag fixtures below one disposable root.
 import unittest  # Run freshness acceptance with the Python standard library.
 from pathlib import Path  # Create exact package, Registry, and upstream paths.
@@ -18,7 +19,7 @@ def create_release_repository(root: Path) -> Path:
     repository.mkdir()  # One normal repository is enough for local git ls-remote.
     git("init", "-b", "main", cwd=repository)
     git("config", "user.name", "Fixture", cwd=repository)
-    git("config", "user.email", "fixture@localhost", cwd=repository)
+    git("config", "user.email", "fixture@example.invalid", cwd=repository)
     (repository / "README.md").write_text("release fixture\n", encoding="utf-8")
     git("add", "--", "README.md", cwd=repository)
     git("commit", "-m", "initial", cwd=repository)
@@ -78,10 +79,15 @@ class FreshnessTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             host = freshness_fixture(root)
-            executable = root / "specify"
-            executable.write_text("#!/bin/sh\nprintf 'specify-cli 0.16.0\\n'\n", encoding="utf-8")
-            executable.chmod(0o755)
-            with patch("skill_lifecycle.freshness.shutil.which", return_value=str(executable)):
+            executable = root / "specify_version.py"
+            executable.write_text("print('specify-cli 0.16.0')\n", encoding="utf-8")
+            registry = json.loads(host.registry_path.read_text(encoding="utf-8"))
+            registry["skills"][0]["updates"]["cli"] = {
+                "command": "python",
+                "arguments": [str(executable)],
+            }
+            host.registry_path.write_text(json.dumps(registry, indent=2) + "\n", encoding="utf-8")
+            with patch("skill_lifecycle.freshness.shutil.which", return_value=sys.executable):
                 result = check_updates(host, "spec-kit")
         update = result["updates"][0]
         self.assertEqual(update["cliStatus"], "INSTALLED")

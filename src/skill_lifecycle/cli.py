@@ -1,5 +1,5 @@
 """
-Command-line trigger for the Linux-native Skill lifecycle product.
+Command-line trigger for the Windows and Linux Skill lifecycle product.
 
 The parser translates one explicit user trigger into one lifecycle command. Inventory, transactions,
 verification, state changes, and recovery logic stay in their business modules, while this entrypoint
@@ -10,16 +10,18 @@ from __future__ import annotations  # Keep annotations available on Python 3.12.
 
 import argparse  # Convert shell arguments into one explicit command request.
 import json  # Render deterministic machine-readable feedback.
-import sys  # Refuse non-Linux runtime and separate BLOCKED diagnostics.
+import sys  # Render BLOCKED diagnostics and report the running interpreter.
 from pathlib import Path  # Preserve POSIX paths from the CLI boundary.
 from typing import Any  # Describe the structured result passed to the renderer.
 
 from skill_lifecycle.freshness import check_updates  # Compare configured PACKAGE releases without writes or fetch.
+from skill_lifecycle.guardian import approve_guardian_update, publish_guardian_policy, scan_guardian, schedule_guardian  # Run policy, daily scan, approval, and scheduling commands.
 from skill_lifecycle.inventory import governance_result, registry_result, report_result, scan_skills, write_registry  # Read and publish inventory evidence.
 from skill_lifecycle.manager_identity import manager_identity  # Report exact package and source identity without writes.
 from skill_lifecycle.manager_promotion import execute_manager_promotion, read_promotion_plan  # Run one exact offline self-promotion plan.
 from skill_lifecycle.operations import backup_preview, create_backup, inspect_install, install_skill, restore_backup, update_skill  # Execute explicit lifecycle transactions.
 from skill_lifecycle.paths import HostLayout, LifecycleBlocked  # Apply one host layout and shared stop gate.
+from skill_lifecycle.platforms import UnsupportedPlatform, current_platform
 from skill_lifecycle.pilot import activate_pilot, approve_pilot, rollback_pilot, verify_pilot  # Run the reviewed Phase D decision-to-rollback chain.
 from skill_lifecycle.shadow import preview_shadow, write_shadow  # Compare pinned sources in an isolated output tree.
 from skill_lifecycle.stability import health, stabilize  # Freeze and compare stable-use evidence.
@@ -28,7 +30,7 @@ from skill_lifecycle.verification import verify_target  # Collect bounded Static
 
 def parser() -> argparse.ArgumentParser:
     """Describe every command and make each mutating boundary visible as --apply."""
-    root = argparse.ArgumentParser(prog="skill", description="Python 3.12 Linux-native Skill lifecycle CLI")
+    root = argparse.ArgumentParser(prog="skill", description="Python 3.12 Windows/Linux Skill lifecycle CLI")
     root.add_argument("--version", action="store_true", help="Report structured manager version and source identity")
     root.add_argument("--activity-root", type=Path, help="Override ~/.agents/skills")
     root.add_argument("--data-root", type=Path, help="Override XDG data storage")
@@ -61,12 +63,38 @@ def parser() -> argparse.ArgumentParser:
 
     update = commands.add_parser("update", help="Preview or apply one validated fast-forward update")
     update.add_argument("--name", required=True)
+    update.add_argument("--approval", type=Path, help="Exact Guardian approval required by --apply")
+    update.add_argument("--evaluated-at", help="Timezone-aware approval evaluation time required by --apply")
     update.add_argument("--apply", action="store_true")
 
     updates = commands.add_parser("updates", help="Check configured PACKAGE release freshness without writes")
     updates_target = updates.add_mutually_exclusive_group(required=True)
     updates_target.add_argument("--name", help="Check one exact Registry name")
     updates_target.add_argument("--all", dest="all_skills", action="store_true", help="Check every configured PACKAGE")
+
+    guardian = commands.add_parser("guardian", help="Configure and run the read-only daily lifecycle guardian")
+    guardian_commands = guardian.add_subparsers(dest="guardian_command", required=True)
+    guardian_policy = guardian_commands.add_parser("policy", help="Preview or publish desired monitoring policy")
+    guardian_policy.add_argument("--file", type=Path, required=True)
+    guardian_policy.add_argument("--apply", action="store_true")
+    guardian_scan = guardian_commands.add_parser("scan", help="Scan every Registry record and optionally publish reports")
+    guardian_scan.add_argument("--policy", type=Path, help="Preview against an explicit policy instead of canonical policy")
+    guardian_scan.add_argument("--observed-at", help="Explicit timezone-aware evidence time for deterministic runs")
+    guardian_scan.add_argument("--apply", action="store_true")
+    guardian_approve = guardian_commands.add_parser("approve", help="Preview or publish one exact human update approval")
+    guardian_approve.add_argument("--report", type=Path, required=True)
+    guardian_approve.add_argument("--name", required=True)
+    guardian_approve.add_argument("--decision-id", required=True)
+    guardian_approve.add_argument("--requested-by", required=True)
+    guardian_approve.add_argument("--requested-at", required=True)
+    guardian_approve.add_argument("--decided-by", required=True)
+    guardian_approve.add_argument("--decided-at", required=True)
+    guardian_approve.add_argument("--expires-at", required=True)
+    guardian_approve.add_argument("--reason", required=True)
+    guardian_approve.add_argument("--apply", action="store_true")
+    guardian_schedule = guardian_commands.add_parser("schedule", help="Preview or install a scan-only daily user schedule")
+    guardian_schedule.add_argument("--time", default="03:00", help="Local daily time in HH:MM form")
+    guardian_schedule.add_argument("--apply", action="store_true")
 
     backup = commands.add_parser("backup", help="Preview or create a link-aware backup")
     backup.add_argument("--path", action="append", type=Path, required=True, help="Explicit root; repeat as needed")
@@ -149,12 +177,13 @@ def parser() -> argparse.ArgumentParser:
 
 def layout(arguments: argparse.Namespace) -> HostLayout:
     """Apply explicit root overrides without changing environment variables or creating paths."""
-    default = HostLayout.linux_default()
+    default = HostLayout.default()
     return HostLayout(
         activity_root=(arguments.activity_root or default.activity_root).expanduser(),
         data_root=(arguments.data_root or default.data_root).expanduser(),
         state_root=(arguments.state_root or default.state_root).expanduser(),
         cache_root=(arguments.cache_root or default.cache_root).expanduser(),
+        platform=default.platform,
     )
 
 
@@ -171,6 +200,18 @@ def target_from_name(host: HostLayout, name: str) -> Path:
 
 def execute(arguments: argparse.Namespace, host: HostLayout) -> dict[str, Any]:
     """Dispatch one parsed trigger to one business command and return its feedback."""
+    linux_only = {
+        "pilot-approve",
+        "pilot-activate",
+        "pilot-verify",
+        "pilot-rollback",
+        "manager-upgrade",
+        "manager-rehearse",
+    }
+    if host.platform.name == "windows" and arguments.command in linux_only:
+        raise LifecycleBlocked(
+            f"{arguments.command} is Linux-only until a Windows-native recovery rehearsal is verified."
+        )
     if arguments.command == "scan":
         roots = arguments.root or [host.activity_root]
         return {"status": "PASS", "action": "SCANNED", "inventory": scan_skills(roots), "mutations": 0}
@@ -189,9 +230,29 @@ def execute(arguments: argparse.Namespace, host: HostLayout) -> dict[str, Any]:
             raise LifecycleBlocked("Install requires a source path or Git URL.")
         return install_skill(host, source, arguments.mode, arguments.skill_path) if arguments.apply else inspect_install(host, source, arguments.mode, arguments.skill_path)
     if arguments.command == "update":
-        return update_skill(host, arguments.name, arguments.apply)
+        return update_skill(host, arguments.name, arguments.apply, arguments.approval, arguments.evaluated_at)
     if arguments.command == "updates":
         return check_updates(host, arguments.name)
+    if arguments.command == "guardian":
+        if arguments.guardian_command == "policy":
+            return publish_guardian_policy(host, arguments.file, arguments.apply)
+        if arguments.guardian_command == "scan":
+            return scan_guardian(host, arguments.policy, arguments.apply, arguments.observed_at)
+        if arguments.guardian_command == "schedule":
+            return schedule_guardian(host, arguments.time, arguments.apply)
+        return approve_guardian_update(
+            host,
+            report_path=arguments.report,
+            name=arguments.name,
+            decision_id=arguments.decision_id,
+            requested_by=arguments.requested_by,
+            requested_at=arguments.requested_at,
+            decided_by=arguments.decided_by,
+            decided_at=arguments.decided_at,
+            expires_at=arguments.expires_at,
+            reason=arguments.reason,
+            apply=arguments.apply,
+        )
     if arguments.command == "backup":
         return create_backup(host, arguments.path) if arguments.apply else backup_preview(host, arguments.path)
     if arguments.command == "restore":
@@ -260,9 +321,11 @@ def execute(arguments: argparse.Namespace, host: HostLayout) -> dict[str, Any]:
 
 def main(arguments: list[str] | None = None) -> int:
     """Execute one command and return a shell-friendly PASS/UNKNOWN or BLOCKED exit code."""
-    if sys.platform != "linux":
-        print(json.dumps({"status": "BLOCKED", "error": "Linux runtime required."}), file=sys.stderr)
-        return 1  # This runtime intentionally has no Windows compatibility branch.
+    try:
+        current_platform()
+    except UnsupportedPlatform as error:
+        print(json.dumps({"status": "BLOCKED", "error": str(error)}), file=sys.stderr)
+        return 1
     command_parser = parser()
     parsed = command_parser.parse_args(arguments)
     if parsed.version:

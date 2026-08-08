@@ -1,78 +1,114 @@
 # Skill Lifecycle Manager
 
-Python 3.12 and uv native Skill lifecycle tooling for Ubuntu. It preserves the established Registry,
-governance, verification, transaction, recovery, and stable-health contracts while removing
-PowerShell from the normal Linux runtime.
+[![CI](https://github.com/Confidence-huang/skill-lifecycle-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/Confidence-huang/skill-lifecycle-manager/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB.svg)](https://www.python.org/)
 
-## Development
+An evidence-first lifecycle and governance CLI for Codex and cross-agent Skills. One Python core
+runs on Windows and Linux; mutating commands preview by default and require `--apply`.
+
+## What it manages
+
+- physical Skill inventory and alias deduplication;
+- canonical Registry plus generated governance reports;
+- explicit Static, Runtime, and Behavior verification;
+- transactional PACKAGE, SOURCE, and HYBRID installation;
+- validated fast-forward source updates and read-only release checks;
+- scan-only daily Guardian reports with declared dependency and compatibility probes;
+- exact, expiring human approvals required before source updates are applied;
+- link-aware backups, verified restores, immutable baselines, and zero-write health checks;
+- isolated V5 artifact, approval, evidence, lock, and transaction contracts.
+
+## Platform support
+
+| Capability | Linux | Windows |
+|---|---:|---:|
+| Scan, Registry, reports, governance | ✅ | ✅ |
+| Verify and portable `{python}` probes | ✅ | ✅ |
+| Install/update | ✅ symbolic link | ✅ directory junction |
+| Backup/restore and stable health | ✅ | ✅ |
+| V5 contract and shadow validation | ✅ | ✅ |
+| Daily Guardian scan/report scheduling | ✅ systemd user timer | ✅ Task Scheduler |
+| Guardian approval-gated source updates | ✅ | ✅ |
+| Reviewed Phase D pilot activation | ✅ | Not yet verified |
+| Offline manager self-promotion/rehearsal | ✅ | Not yet verified |
+
+The Linux-only rows are blocked explicitly on Windows. They need a separate Windows-native recovery
+rehearsal before they can be promoted to supported status.
+
+## Install
+
+Install [uv](https://docs.astral.sh/uv/), clone this repository, then run one of the following.
+
+Linux:
 
 ```bash
+./bootstrap.sh install
+skill --version
+```
+
+Windows PowerShell:
+
+```powershell
+.\bootstrap.ps1 install
+skill --version
+```
+
+For development on either platform:
+
+```text
 uv sync --frozen
 uv run python -m unittest discover -s tests -v
 uv run skill --help
-uv run skill --version
 uv build
 ```
 
-The normal command surface is:
+Run repository Python only through `uv run python`; do not install a system `python` alias. The
+Guardian schedule records the installed tool environment's exact interpreter path so it does not
+depend on whichever Python happens to appear on `PATH` later.
+
+## Core workflow
 
 ```text
 skill scan
-skill registry [--apply]
-skill report [--apply]
-skill governance [--apply]
-skill verify (--name NAME | --target-skill PATH) [--apply]
-skill install SOURCE --mode auto|package|source|hybrid [--skill-path PATH] [--apply]
-skill update --name NAME [--apply]
-skill updates (--name NAME | --all)
-skill backup --path PATH [--path PATH ...] [--apply]
-skill restore --backup-path PATH --destination PATH [--apply]
-skill stabilize [--apply] [--archive-existing]
-skill shadow --registry-path PATH --source-set PATH --output-root PATH [--apply]
-skill manager-upgrade --plan PATH [--apply]
-skill manager-rehearse --plan PATH --failure-point POINT [--apply]
-skill health [--project-root PATH]
+skill registry
+skill registry --apply
+skill governance --apply
+skill verify --target-skill PATH --apply
+skill install SOURCE --mode source
+skill install SOURCE --mode source --apply
+skill update --name NAME
+skill guardian policy --file guardian-policy.json --apply
+skill guardian scan --apply
+skill guardian schedule --time 03:00 --apply
+skill guardian approve --report REPORT.json --name NAME ... --apply
+skill update --name NAME --approval APPROVAL.json --evaluated-at TIMESTAMP --apply
+skill backup --path PATH --apply
+skill stabilize --apply
+skill health
 ```
 
-`skill updates` reads optional PACKAGE release metadata from `.skill-lifecycle.json`, compares exact
-stable Git tags, and probes an optional companion CLI. It never fetches, installs, upgrades, writes
-state, or invokes GitHub CLI. `skill update --apply` remains the separate SOURCE/HYBRID mutation.
+Preview and applied operations return structured JSON. `PASS`, `BLOCKED`, `UNKNOWN`,
+`NOT_CONFIGURED`, and `NOT_RUN` are evidence states—not interchangeable success labels.
 
-`./bootstrap.sh install` is the fresh-install entry. `./bootstrap.sh upgrade --plan PATH [--apply]`
-is the distinct offline manager-promotion entry; it delegates to the exact plan, preserves the prior
-uv receipt and state preimages, and uses `uv tool install --offline --force --editable` only after
-preview passes. A completed exact retry is zero-write.
+Read [SKILL.md](SKILL.md) for the agent workflow and `references/` for Registry, verification,
+mutation, governance, stability, and V5 supply-chain contracts.
 
-## V5 Phase A contract candidate
+## Safety model
 
-The `schemas/` directory and `skill_lifecycle.contracts` module define the isolated V5 supply-chain
-contract candidate. They validate synthetic artifacts, desired locks, evidence, approval decisions,
-zero-write update previews, and transaction journals without reading or changing live lifecycle state.
+- no implicit overwrite, merge, deletion, repair, or activation;
+- Git state is pinned to full commits and updates must prove fast-forward ancestry;
+- scheduled Guardian work publishes reports but cannot enter an install or update transaction;
+- compatibility stays `UNKNOWN` unless a declared bounded probe supplies direct evidence;
+- no risk tier permits unattended production updates in V5.2;
+- verification uses argument arrays, bounded output, timeouts, and credential redaction;
+- backups do not follow activity links and restores do not silently recreate host-specific links;
+- stable health never fetches, installs, updates, or writes;
+- host-local Registry and baseline evidence must be regenerated after migration.
 
-```bash
-uv run python -m unittest tests.test_contracts -v
-```
+## Contributing and security
 
-Phase A is not CLI activation. It does not create a lock, approval, evidence report, transaction,
-Registry migration, or baseline. Read `references/supply-chain-v5.md` before extending this candidate.
+See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a change. Report vulnerabilities through the
+private process in [SECURITY.md](SECURITY.md), not a public issue.
 
-## V5 manager promotion candidate
-
-`skill --version` reports package version, full source commit, Git tree, deterministic identity
-SHA256, source path/cleanliness, and `mutations: 0`. A manager promotion plan pins old/new commits,
-candidate source, carrier path/SHA256, formal source/activity/CLI, uv tool roots/receipt, five state
-preimages, and the expected inventory count.
-
-`skill manager-upgrade` previews by default. Applied FORMAL promotion captures recovery material,
-publishes the source and CLI offline, regenerates the four observed-state views, archives/replaces
-the baseline once, and requires final health `PASS` with zero mutations. `manager-rehearse` accepts
-failure injection only for a REHEARSAL plan whose mutable paths remain below one sandbox root.
-Rollback restores the old commit, receipt, views, baseline, activity resolution, and old health
-while retaining failure evidence and any baseline-history artifact.
-
-## V5 Phase B shadow candidate
-
-`skill shadow` reads one frozen Registry v1 file and explicitly pinned Git sources. Preview returns
-exact planned file hashes with `mutations: 0`; `--apply` may publish only a new named child below
-`data-root/shadows`. Every proposed lock entry remains `BLOCKED_MISSING_APPROVAL`, so shadow output
-cannot become desired state or authorize activation.
+Licensed under the [Apache License 2.0](LICENSE).

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skill-lifecycle-manager.local/schemas/v5/guardian-report.schema.json",
+  "title": "Immutable Skill Guardian scan report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "documentType", "reportID", "generatedAt", "registry", "policy", "summary", "skills", "mutations"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "documentType": {"const": "SKILL_GUARDIAN_REPORT"},
+    "reportID": {"type": "string", "pattern": "^guardian-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}$"},
+    "generatedAt": {"type": "string", "format": "date-time"},
+    "registry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "inventoryFingerprint"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9A-F]{64}$"},
+        "inventoryFingerprint": {"type": "string", "pattern": "^[0-9A-F]{64}$"}
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "version", "sha256", "path"],
+      "properties": {
+        "state": {"enum": ["CONFIGURED", "SAFE_DEFAULT"]},
+        "version": {"type": "string", "minLength": 1},
+        "sha256": {"type": ["string", "null"], "pattern": "^[0-9A-F]{64}$"},
+        "path": {"type": ["string", "null"]}
+      }
+    },
+    "summary": {"type": "object"},
+    "skills": {"type": "array", "items": {"type": "object"}},
+    "mutations": {"const": 0}
+  }
+}

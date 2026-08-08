@@ -2,8 +2,8 @@
 
 The JSON Registry is the canonical machine-readable state. The YAML file beside it is a generated human-readable mirror.
 
-Registry paths describe one live host. Generate fresh Registry and stability evidence on Linux; a
-Windows Registry with D-drive paths is historical input, not current Linux state.
+Registry paths describe one live host. Generate fresh Registry and stability evidence after moving
+between Windows and Linux; paths or link types from the previous host are historical input only.
 
 ## Top-level fields
 

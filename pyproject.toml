@@ -1,13 +1,28 @@
 [project]
 name = "skill-lifecycle-manager"
-version = "5.0.0"
-description = "Python 3.12 Linux-native Skill lifecycle and governance CLI"
+version = "5.2.0"
+description = "Python 3.12 Windows and Linux Skill lifecycle guardian and governance CLI"
 readme = "README.md"
 requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [{ name = "Confidence-huang" }]
+keywords = ["codex", "skills", "governance", "supply-chain", "lifecycle"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3.12",
+]
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/Confidence-huang/skill-lifecycle-manager"
+Repository = "https://github.com/Confidence-huang/skill-lifecycle-manager"
+Issues = "https://github.com/Confidence-huang/skill-lifecycle-manager/issues"
+
 [dependency-groups]
-dev = ["jsonschema>=4.25,<5"]
+dev = ["jsonschema>=4.25,<5", "pyyaml>=6,<7"]
 
 [project.scripts]
 skill = "skill_lifecycle.cli:main"

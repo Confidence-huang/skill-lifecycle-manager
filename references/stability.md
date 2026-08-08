@@ -31,16 +31,16 @@ skill health
 Add `--project-root` to validate a project's `PROJECT_LOG.md` and `project-skill-profile.json` against the same global baseline:
 
 ```bash
-skill health --project-root /home/a/CodexProjects/Project_25-AI-Courses
+skill health --project-root /absolute/path/to/project
 ```
 
 Health is always read-only. It scans live Skill identity, compares local Git and file evidence, checks the frozen recovery manifest, and returns structured JSON. It does not fetch remotes; therefore upstream freshness is reported as `UNKNOWN_NOT_FETCHED`, never as “no updates.”
 
 Baselines are host-local because they contain absolute paths, activity-link types, Registry hashes,
-and local repository identities. Preserve the Windows baseline as history and create a fresh Linux
-baseline only after Ubuntu fixtures, Registry generation, reports, and a complete backup pass.
+and local repository identities. Preserve the old baseline as history and create a fresh baseline
+after the destination host's tests, Registry generation, reports, and complete backup pass.
 
-An existing Linux baseline is also immutable. A deliberate implementation migration must use
+An existing baseline is immutable on every platform. A deliberate implementation migration must use
 `skill stabilize --apply --archive-existing`, which verifies and preserves the prior bytes under
 `baseline-history/` before publishing the new baseline.
 

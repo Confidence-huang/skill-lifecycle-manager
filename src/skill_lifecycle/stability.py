@@ -2,7 +2,7 @@
 Immutable stable-use baselines and read-only health comparison.
 
 Stabilize gathers committed manager identity, Registry/report hashes, physical inventory, source Git
-states, activity-link identity, and a complete recovery manifest. Health rebuilds those facts without
+states, platform activity-link identity, and a complete recovery manifest. Health rebuilds those facts without
 writing or fetching and reports each comparison separately so drift is never hidden behind one score.
 """
 
@@ -10,7 +10,6 @@ from __future__ import annotations  # Keep type annotations stable on Python 3.1
 
 import hashlib  # Fingerprint each source worktree status without conflating it with commit identity.
 import json  # Read canonical Registry, project profiles, manifests, and frozen baselines.
-import os  # Record the literal activity symbolic-link target.
 import shutil  # Preserve an explicitly superseded baseline byte-for-byte in history.
 import subprocess  # Read local Git state without a shell or remote fetch.
 from datetime import datetime, timezone  # Timestamp immutable evidence and history names.
@@ -82,13 +81,13 @@ def collect_baseline(layout: HostLayout) -> dict[str, Any]:
         raise LifecycleBlocked(f"Stable evidence files are missing: {missing}")
     registry = json.loads(layout.registry_path.read_text(encoding="utf-8"))
     live = scan_skills(Path(root) for root in registry.get("roots", []))
-    manager = manager_repository()
+    manager = manager_repository().resolve(strict=True)
     manager_status = git_output(manager, "status", "--porcelain=v1")
     if manager_status:
         raise LifecycleBlocked(f"Manager source is dirty: {manager}")
     activity = layout.activity_root / "skill-lifecycle-manager"
-    if not activity.is_symlink():
-        raise LifecycleBlocked(f"Manager activity is not a symbolic link: {activity}")
+    if not layout.platform.is_directory_link(activity):
+        raise LifecycleBlocked(f"Manager activity is not a supported directory link: {activity}")
     activity_target = activity.resolve(strict=True)
     if activity_target != manager:
         raise LifecycleBlocked(f"Manager activity target does not match installed source: {activity_target}")
@@ -97,7 +96,7 @@ def collect_baseline(layout: HostLayout) -> dict[str, Any]:
         "schemaVersion": 1,
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "status": "FROZEN_STABLE_USE",
-        "platform": "linux",
+        "platform": layout.platform.name,
         "manager": {
             "repository": str(manager),
             "commit": git_output(manager, "rev-parse", "HEAD"),
@@ -106,7 +105,7 @@ def collect_baseline(layout: HostLayout) -> dict[str, Any]:
             "identitySHA256": identity["identitySHA256"],
             "status": manager_status or "",
             "activityPath": str(activity),
-            "activityTarget": os.readlink(activity),
+            "activityTarget": layout.platform.link_target(activity),
             "activityResolvedTarget": str(activity_target),
             "runtime": "Python 3.12 + uv",
         },
@@ -189,10 +188,10 @@ def health(layout: HostLayout, project_root: Path | None = None) -> dict[str, An
     manager_activity = Path(baseline["manager"]["activityPath"])
     identity = manager_identity(manager)
     checks = {
-        "platform": baseline.get("platform") == "linux",
+        "platform": baseline.get("platform") == layout.platform.name,
         "managerCommit": git_output(manager, "rev-parse", "HEAD") == baseline["manager"].get("commit"),
         "managerClean": (git_output(manager, "status", "--porcelain=v1") or "") == "",
-        "activitySymbolicLink": manager_activity.is_symlink() and str(manager_activity.resolve(strict=True)) == baseline["manager"].get("activityResolvedTarget"),
+        "activityLink": layout.platform.is_directory_link(manager_activity) and str(manager_activity.resolve(strict=True)) == baseline["manager"].get("activityResolvedTarget"),
         "registrySHA256": layout.registry_path.is_file() and sha256_file(layout.registry_path) == baseline["registry"].get("sha256"),
         "yamlSHA256": layout.registry_yaml_path.is_file() and sha256_file(layout.registry_yaml_path) == baseline["registry"].get("yamlSHA256"),
         "capabilityReportSHA256": layout.capability_report_path.is_file() and sha256_file(layout.capability_report_path) == baseline["registry"].get("capabilityReportSHA256"),

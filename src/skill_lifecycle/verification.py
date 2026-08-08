@@ -14,6 +14,7 @@ import os  # Read already-present environment placeholders without changing them
 import re  # Redact common credential-bearing diagnostic shapes.
 import shutil  # Resolve named executables through the current PATH.
 import subprocess  # Run declared probes through explicit argument arrays.
+import sys  # Resolve the current cross-platform Python interpreter explicitly.
 import tempfile  # Give each applied verification one disposable work root.
 from datetime import datetime, timezone  # Name persisted reports uniquely in UTC.
 from pathlib import Path  # Enforce target-local executable and placeholder paths.
@@ -49,7 +50,11 @@ def read_manifest(target: Path) -> dict[str, Any] | None:
 
 def expand_value(value: str, target: Path, temporary: Path) -> tuple[str | None, str | None]:
     """Resolve one documented placeholder and report missing environment evidence explicitly."""
-    expanded = value.replace("{skillRoot}", str(target)).replace("{tempRoot}", str(temporary))
+    expanded = (
+        value.replace("{skillRoot}", str(target))
+        .replace("{tempRoot}", str(temporary))
+        .replace("{python}", sys.executable)
+    )
     for variable in re.findall(r"\{env:([A-Za-z_][A-Za-z0-9_]*)\}", expanded):
         if variable not in os.environ:
             return None, f"Environment variable is missing: {variable}"

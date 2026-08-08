@@ -17,6 +17,9 @@ offline identifiers; validators must register the local files and must not fetch
 | `pilot-probe-plan.schema.json` | Artifact-bound no-shell commands and exact expectations for one reviewed pilot |
 | `pilot-probe-evidence.schema.json` | Bounded transaction-owned output from the reviewed probe plan |
 | `manager-promotion-plan.schema.json` | Exact offline manager source, tool, state, recovery, and authorization pins |
+| `guardian-policy.schema.json` | Desired monitoring rules kept separate from observed Registry state |
+| `guardian-report.schema.json` | One scan-only Registry-wide update and compatibility observation |
+| `update-approval.schema.json` | Human authority bound to one exact report/current/candidate tuple |
 | `common.schema.json` | Shared IDs, paths, timestamps, hashes, scopes, and tree entries |
 
 The schemas intentionally reject unknown properties. A future additive field therefore requires a

@@ -1,5 +1,5 @@
 """
-Linux host paths and durable-file primitives for Skill lifecycle commands.
+Cross-platform host paths and durable-file primitives for Skill lifecycle commands.
 
 Every command receives one HostLayout, so activity, source, state, cache, and recovery paths stay
 visible and fixture-overridable. Atomic writers publish complete UTF-8 evidence without exposing a
@@ -10,10 +10,11 @@ from __future__ import annotations  # Keep type annotations stable on Python 3.1
 
 import hashlib  # Produce the SHA256 identities shared by Registry, backup, and stability evidence.
 import json  # Serialize canonical machine-readable lifecycle state.
-import os  # Read the Linux XDG directory overrides.
-from dataclasses import dataclass  # Keep the complete host layout immutable after CLI parsing.
+from dataclasses import dataclass, field  # Keep the complete host layout immutable after CLI parsing.
 from pathlib import Path  # Preserve POSIX path identity and symbolic-link behavior.
 from typing import Any  # Describe structured JSON documents without hiding their fields.
+
+from skill_lifecycle.platforms import HostPlatform, current_platform
 
 
 class LifecycleBlocked(RuntimeError):
@@ -22,26 +23,27 @@ class LifecycleBlocked(RuntimeError):
 
 @dataclass(frozen=True)
 class HostLayout:
-    """Directories owned by one Linux lifecycle-manager installation."""
+    """Directories and platform mechanics owned by one manager installation."""
 
     activity_root: Path  # Agent-visible Skill entries, normally ~/.agents/skills.
     data_root: Path  # Managed sources, package entities, and recovery backups.
     state_root: Path  # Canonical Registry, reports, verification, and baseline evidence.
     cache_root: Path  # Transaction-owned candidates and detached update worktrees.
+    platform: HostPlatform = field(default_factory=current_platform)
+
+    @classmethod
+    def default(cls, platform: HostPlatform | None = None) -> "HostLayout":
+        """Resolve the running platform's documented defaults without creating directories."""
+        adapter = platform or current_platform()
+        roots = adapter.default_roots()
+        return cls(roots.activity, roots.data, roots.state, roots.cache, adapter)
 
     @classmethod
     def linux_default(cls) -> "HostLayout":
-        """Resolve the documented XDG defaults without creating any directory."""
-        home = Path.home()  # The current Ubuntu user owns every fallback path.
-        data_home = Path(os.environ.get("XDG_DATA_HOME", home / ".local/share"))
-        state_home = Path(os.environ.get("XDG_STATE_HOME", home / ".local/state"))
-        cache_home = Path(os.environ.get("XDG_CACHE_HOME", home / ".cache"))
-        return cls(
-            activity_root=home / ".agents/skills",
-            data_root=data_home / "skill-lifecycle-manager",
-            state_root=state_home / "skill-lifecycle-manager",
-            cache_root=cache_home / "skill-lifecycle-manager",
-        )
+        """Retain the V5 API while delegating to the Linux platform adapter."""
+        from skill_lifecycle.platforms import platform_for
+
+        return cls.default(platform_for("linux"))
 
     @property
     def registry_path(self) -> Path:
@@ -97,6 +99,36 @@ class HostLayout:
     def transaction_root(self) -> Path:
         """Return the parent that owns immutable event directories for applied transactions."""
         return self.v5_root / "transactions"
+
+    @property
+    def guardian_root(self) -> Path:
+        """Return the isolated root for monitoring policy, reports, approvals, and schedule evidence."""
+        return self.state_root / "guardian"
+
+    @property
+    def guardian_policy_path(self) -> Path:
+        """Return desired monitoring policy without conflating it with observed Registry state."""
+        return self.guardian_root / "policy.json"
+
+    @property
+    def guardian_latest_json_path(self) -> Path:
+        """Return the replaceable JSON pointer to the newest completed Guardian report."""
+        return self.guardian_root / "latest.json"
+
+    @property
+    def guardian_latest_markdown_path(self) -> Path:
+        """Return the replaceable human-readable view of the newest Guardian report."""
+        return self.guardian_root / "latest.md"
+
+    @property
+    def guardian_history_root(self) -> Path:
+        """Return the append-only directory for immutable timestamped Guardian reports."""
+        return self.guardian_root / "reports"
+
+    @property
+    def guardian_approval_root(self) -> Path:
+        """Return the append-only directory for exact human update approvals."""
+        return self.guardian_root / "approvals"
 
 
 def sha256_file(path: Path) -> str:
