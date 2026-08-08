@@ -81,7 +81,7 @@ def collect_baseline(layout: HostLayout) -> dict[str, Any]:
         raise LifecycleBlocked(f"Stable evidence files are missing: {missing}")
     registry = json.loads(layout.registry_path.read_text(encoding="utf-8"))
     live = scan_skills(Path(root) for root in registry.get("roots", []))
-    manager = manager_repository()
+    manager = manager_repository().resolve(strict=True)
     manager_status = git_output(manager, "status", "--porcelain=v1")
     if manager_status:
         raise LifecycleBlocked(f"Manager source is dirty: {manager}")
