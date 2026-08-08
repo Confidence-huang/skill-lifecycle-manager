@@ -15,6 +15,7 @@ from pathlib import Path  # Preserve POSIX paths from the CLI boundary.
 from typing import Any  # Describe the structured result passed to the renderer.
 
 from skill_lifecycle.freshness import check_updates  # Compare configured PACKAGE releases without writes or fetch.
+from skill_lifecycle.guardian import approve_guardian_update, publish_guardian_policy, scan_guardian, schedule_guardian  # Run policy, daily scan, approval, and scheduling commands.
 from skill_lifecycle.inventory import governance_result, registry_result, report_result, scan_skills, write_registry  # Read and publish inventory evidence.
 from skill_lifecycle.manager_identity import manager_identity  # Report exact package and source identity without writes.
 from skill_lifecycle.manager_promotion import execute_manager_promotion, read_promotion_plan  # Run one exact offline self-promotion plan.
@@ -62,12 +63,38 @@ def parser() -> argparse.ArgumentParser:
 
     update = commands.add_parser("update", help="Preview or apply one validated fast-forward update")
     update.add_argument("--name", required=True)
+    update.add_argument("--approval", type=Path, help="Exact Guardian approval required by --apply")
+    update.add_argument("--evaluated-at", help="Timezone-aware approval evaluation time required by --apply")
     update.add_argument("--apply", action="store_true")
 
     updates = commands.add_parser("updates", help="Check configured PACKAGE release freshness without writes")
     updates_target = updates.add_mutually_exclusive_group(required=True)
     updates_target.add_argument("--name", help="Check one exact Registry name")
     updates_target.add_argument("--all", dest="all_skills", action="store_true", help="Check every configured PACKAGE")
+
+    guardian = commands.add_parser("guardian", help="Configure and run the read-only daily lifecycle guardian")
+    guardian_commands = guardian.add_subparsers(dest="guardian_command", required=True)
+    guardian_policy = guardian_commands.add_parser("policy", help="Preview or publish desired monitoring policy")
+    guardian_policy.add_argument("--file", type=Path, required=True)
+    guardian_policy.add_argument("--apply", action="store_true")
+    guardian_scan = guardian_commands.add_parser("scan", help="Scan every Registry record and optionally publish reports")
+    guardian_scan.add_argument("--policy", type=Path, help="Preview against an explicit policy instead of canonical policy")
+    guardian_scan.add_argument("--observed-at", help="Explicit timezone-aware evidence time for deterministic runs")
+    guardian_scan.add_argument("--apply", action="store_true")
+    guardian_approve = guardian_commands.add_parser("approve", help="Preview or publish one exact human update approval")
+    guardian_approve.add_argument("--report", type=Path, required=True)
+    guardian_approve.add_argument("--name", required=True)
+    guardian_approve.add_argument("--decision-id", required=True)
+    guardian_approve.add_argument("--requested-by", required=True)
+    guardian_approve.add_argument("--requested-at", required=True)
+    guardian_approve.add_argument("--decided-by", required=True)
+    guardian_approve.add_argument("--decided-at", required=True)
+    guardian_approve.add_argument("--expires-at", required=True)
+    guardian_approve.add_argument("--reason", required=True)
+    guardian_approve.add_argument("--apply", action="store_true")
+    guardian_schedule = guardian_commands.add_parser("schedule", help="Preview or install a scan-only daily user schedule")
+    guardian_schedule.add_argument("--time", default="03:00", help="Local daily time in HH:MM form")
+    guardian_schedule.add_argument("--apply", action="store_true")
 
     backup = commands.add_parser("backup", help="Preview or create a link-aware backup")
     backup.add_argument("--path", action="append", type=Path, required=True, help="Explicit root; repeat as needed")
@@ -203,9 +230,29 @@ def execute(arguments: argparse.Namespace, host: HostLayout) -> dict[str, Any]:
             raise LifecycleBlocked("Install requires a source path or Git URL.")
         return install_skill(host, source, arguments.mode, arguments.skill_path) if arguments.apply else inspect_install(host, source, arguments.mode, arguments.skill_path)
     if arguments.command == "update":
-        return update_skill(host, arguments.name, arguments.apply)
+        return update_skill(host, arguments.name, arguments.apply, arguments.approval, arguments.evaluated_at)
     if arguments.command == "updates":
         return check_updates(host, arguments.name)
+    if arguments.command == "guardian":
+        if arguments.guardian_command == "policy":
+            return publish_guardian_policy(host, arguments.file, arguments.apply)
+        if arguments.guardian_command == "scan":
+            return scan_guardian(host, arguments.policy, arguments.apply, arguments.observed_at)
+        if arguments.guardian_command == "schedule":
+            return schedule_guardian(host, arguments.time, arguments.apply)
+        return approve_guardian_update(
+            host,
+            report_path=arguments.report,
+            name=arguments.name,
+            decision_id=arguments.decision_id,
+            requested_by=arguments.requested_by,
+            requested_at=arguments.requested_at,
+            decided_by=arguments.decided_by,
+            decided_at=arguments.decided_at,
+            expires_at=arguments.expires_at,
+            reason=arguments.reason,
+            apply=arguments.apply,
+        )
     if arguments.command == "backup":
         return create_backup(host, arguments.path) if arguments.apply else backup_preview(host, arguments.path)
     if arguments.command == "restore":

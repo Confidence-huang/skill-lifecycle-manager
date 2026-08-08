@@ -100,6 +100,36 @@ class HostLayout:
         """Return the parent that owns immutable event directories for applied transactions."""
         return self.v5_root / "transactions"
 
+    @property
+    def guardian_root(self) -> Path:
+        """Return the isolated root for monitoring policy, reports, approvals, and schedule evidence."""
+        return self.state_root / "guardian"
+
+    @property
+    def guardian_policy_path(self) -> Path:
+        """Return desired monitoring policy without conflating it with observed Registry state."""
+        return self.guardian_root / "policy.json"
+
+    @property
+    def guardian_latest_json_path(self) -> Path:
+        """Return the replaceable JSON pointer to the newest completed Guardian report."""
+        return self.guardian_root / "latest.json"
+
+    @property
+    def guardian_latest_markdown_path(self) -> Path:
+        """Return the replaceable human-readable view of the newest Guardian report."""
+        return self.guardian_root / "latest.md"
+
+    @property
+    def guardian_history_root(self) -> Path:
+        """Return the append-only directory for immutable timestamped Guardian reports."""
+        return self.guardian_root / "reports"
+
+    @property
+    def guardian_approval_root(self) -> Path:
+        """Return the append-only directory for exact human update approvals."""
+        return self.guardian_root / "approvals"
+
 
 def sha256_file(path: Path) -> str:
     """Hash one physical file in bounded blocks and return uppercase evidence."""

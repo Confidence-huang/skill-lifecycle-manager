@@ -109,6 +109,123 @@ class HostPlatform:
         else:
             path.unlink()
 
+    def guardian_schedule(
+        self,
+        command: list[str],
+        schedule_time: str,
+        apply: bool,
+        *,
+        home: Path | None = None,
+    ) -> dict[str, object]:
+        """Preview or install one scan-only daily schedule through the host-native scheduler."""
+        if any("\n" in value or "\r" in value for value in command):
+            raise OSError("Guardian schedule command values cannot contain line breaks.")
+        user_home = home or Path.home()  # Tests may isolate the schedule root without changing process HOME.
+        if self.name == "linux":
+            return self._linux_guardian_schedule(command, schedule_time, apply, user_home)
+        if self.name == "windows":
+            return self._windows_guardian_schedule(command, schedule_time, apply)
+        raise UnsupportedPlatform(f"Unsupported host platform: {self.name}")
+
+    def _linux_guardian_schedule(
+        self,
+        command: list[str],
+        schedule_time: str,
+        apply: bool,
+        user_home: Path,
+    ) -> dict[str, object]:
+        """Install new systemd user units and remove them again if activation fails."""
+        unit_root = user_home / ".config" / "systemd" / "user"
+        service_path = unit_root / "skill-lifecycle-guardian.service"
+        timer_path = unit_root / "skill-lifecycle-guardian.timer"
+        escaped = [
+            f'"{value.replace(chr(92), chr(92) * 2).replace(chr(34), chr(92) + chr(34)).replace(chr(37), chr(37) * 2)}"'
+            for value in command
+        ]  # Quotes preserve spaces; doubled percent signs prevent systemd specifier expansion.
+        service_text = "\n".join([
+            "[Unit]",
+            "Description=Skill Lifecycle Guardian daily evidence scan",
+            "",
+            "[Service]",
+            "Type=oneshot",
+            f"ExecStart={' '.join(escaped)}",
+            "",
+        ])
+        timer_text = "\n".join([
+            "[Unit]",
+            "Description=Run Skill Lifecycle Guardian daily",
+            "",
+            "[Timer]",
+            f"OnCalendar=*-*-* {schedule_time}:00",
+            "Persistent=true",
+            "Unit=skill-lifecycle-guardian.service",
+            "",
+            "[Install]",
+            "WantedBy=timers.target",
+            "",
+        ])
+        result: dict[str, object] = {
+            "platform": "linux",
+            "servicePath": str(service_path),
+            "timerPath": str(timer_path),
+            "command": command,
+            "mutations": 0,
+        }
+        if not apply:
+            return result
+        if service_path.exists() or timer_path.exists():
+            raise OSError("Guardian schedule already exists; refusing to overwrite it.")
+
+        unit_root.mkdir(parents=True, exist_ok=True)
+        created: list[Path] = []
+        try:
+            service_path.write_text(service_text, encoding="utf-8")
+            created.append(service_path)
+            timer_path.write_text(timer_text, encoding="utf-8")
+            created.append(timer_path)
+            reload_result = subprocess.run(["systemctl", "--user", "daemon-reload"], text=True, capture_output=True, check=False)
+            if reload_result.returncode:
+                raise OSError(reload_result.stderr.strip() or "systemd user daemon reload failed")
+            enable_result = subprocess.run(["systemctl", "--user", "enable", "--now", "skill-lifecycle-guardian.timer"], text=True, capture_output=True, check=False)
+            if enable_result.returncode:
+                raise OSError(enable_result.stderr.strip() or "systemd user timer activation failed")
+        except BaseException:
+            for path in reversed(created):
+                path.unlink(missing_ok=True)  # Remove only new unit files owned by this failed installation.
+            raise
+        return {**result, "mutations": 3}
+
+    def _windows_guardian_schedule(
+        self,
+        command: list[str],
+        schedule_time: str,
+        apply: bool,
+    ) -> dict[str, object]:
+        """Install one new Task Scheduler entry without overwriting an existing user task."""
+        task_name = "Skill Lifecycle Guardian"
+        task_command = subprocess.list2cmdline(command)  # Windows quoting stays data passed to schtasks.exe.
+        result: dict[str, object] = {
+            "platform": "windows",
+            "taskName": task_name,
+            "taskCommand": task_command,
+            "command": command,
+            "mutations": 0,
+        }
+        if not apply:
+            return result
+        existing = subprocess.run(["schtasks.exe", "/Query", "/TN", task_name], text=True, capture_output=True, check=False)
+        if existing.returncode == 0:
+            raise OSError("Guardian schedule already exists; refusing to overwrite it.")
+        created = subprocess.run(
+            ["schtasks.exe", "/Create", "/SC", "DAILY", "/ST", schedule_time, "/TN", task_name, "/TR", task_command],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if created.returncode:
+            raise OSError(created.stderr.strip() or created.stdout.strip() or "Windows scheduled task creation failed")
+        return {**result, "mutations": 1}
+
 
 def platform_for(platform_name: str) -> HostPlatform:
     """Normalize Python's platform identifier into one supported adapter."""
