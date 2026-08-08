@@ -38,11 +38,12 @@ class StabilityTests(unittest.TestCase):
     def test_stable_baseline_uses_the_structured_manager_identity(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             host, manager = prepared_host(Path(temporary))
+            expected_repository = str(manager.resolve(strict=True))
             with patch("skill_lifecycle.stability.manager_repository", return_value=manager):
                 result = stabilize(host, False, False)
 
         manager_record = result["baseline"]["manager"]
-        self.assertEqual(manager_record["repository"], str(manager.resolve(strict=True)))
+        self.assertEqual(manager_record["repository"], expected_repository)
         self.assertEqual(manager_record["version"], "5.1.0")
         self.assertRegex(manager_record["sourceTree"], r"^[0-9a-f]{40}$")
         self.assertRegex(manager_record["identitySHA256"], r"^[0-9A-F]{64}$")
