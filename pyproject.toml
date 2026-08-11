@@ -1,12 +1,12 @@
 [project]
 name = "skill-lifecycle-manager"
-version = "5.2.0"
-description = "Python 3.12 Windows and Linux Skill lifecycle guardian and governance CLI"
+version = "5.3.0"
+description = "Python 3.12 Windows and Linux Skill and plugin lifecycle governance CLI"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
 authors = [{ name = "Confidence-huang" }]
-keywords = ["codex", "skills", "governance", "supply-chain", "lifecycle"]
+keywords = ["codex", "skills", "plugins", "governance", "supply-chain", "lifecycle"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "License :: OSI Approved :: Apache Software License",
