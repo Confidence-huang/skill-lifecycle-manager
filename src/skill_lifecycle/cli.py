@@ -23,6 +23,7 @@ from skill_lifecycle.operations import backup_preview, create_backup, inspect_in
 from skill_lifecycle.paths import HostLayout, LifecycleBlocked  # Apply one host layout and shared stop gate.
 from skill_lifecycle.platforms import UnsupportedPlatform, current_platform
 from skill_lifecycle.pilot import activate_pilot, approve_pilot, rollback_pilot, verify_pilot  # Run the reviewed Phase D decision-to-rollback chain.
+from skill_lifecycle.plugin_inventory import scan_plugins  # Observe Codex plugins and marketplaces without writes.
 from skill_lifecycle.shadow import preview_shadow, write_shadow  # Compare pinned sources in an isolated output tree.
 from skill_lifecycle.stability import health, stabilize  # Freeze and compare stable-use evidence.
 from skill_lifecycle.verification import verify_target  # Collect bounded Static/Runtime/Behavior evidence.
@@ -71,6 +72,10 @@ def parser() -> argparse.ArgumentParser:
     updates_target = updates.add_mutually_exclusive_group(required=True)
     updates_target.add_argument("--name", help="Check one exact Registry name")
     updates_target.add_argument("--all", dest="all_skills", action="store_true", help="Check every configured PACKAGE")
+
+    plugins = commands.add_parser("plugins", help="Read Codex plugin and marketplace evidence without writes")
+    plugins.add_argument("--available", action="store_true", help="Include uninstalled marketplace entries")
+    plugins.add_argument("--codex-command", default="codex", help="Exact Codex CLI path or executable name")
 
     guardian = commands.add_parser("guardian", help="Configure and run the read-only daily lifecycle guardian")
     guardian_commands = guardian.add_subparsers(dest="guardian_command", required=True)
@@ -233,6 +238,8 @@ def execute(arguments: argparse.Namespace, host: HostLayout) -> dict[str, Any]:
         return update_skill(host, arguments.name, arguments.apply, arguments.approval, arguments.evaluated_at)
     if arguments.command == "updates":
         return check_updates(host, arguments.name)
+    if arguments.command == "plugins":
+        return scan_plugins(arguments.codex_command, arguments.available)
     if arguments.command == "guardian":
         if arguments.guardian_command == "policy":
             return publish_guardian_policy(host, arguments.file, arguments.apply)

@@ -11,7 +11,7 @@ from __future__ import annotations  # Keep type annotations stable on Python 3.1
 
 import json  # Parse the dependency-free manifest subset and structured probe output.
 import os  # Read already-present environment placeholders without changing them.
-import re  # Redact common credential-bearing diagnostic shapes.
+import re  # Resolve declared placeholders in commands and arguments.
 import shutil  # Resolve named executables through the current PATH.
 import subprocess  # Run declared probes through explicit argument arrays.
 import sys  # Resolve the current cross-platform Python interpreter explicitly.
@@ -20,19 +20,9 @@ from datetime import datetime, timezone  # Name persisted reports uniquely in UT
 from pathlib import Path  # Enforce target-local executable and placeholder paths.
 from typing import Any  # Describe manifest and evidence dictionaries explicitly.
 
+from skill_lifecycle.diagnostics import redact  # Bound and redact external-process diagnostics consistently.
 from skill_lifecycle.inventory import read_skill  # Reuse canonical Static identity parsing.
 from skill_lifecycle.paths import HostLayout, LifecycleBlocked, atomic_json  # Share stop and persistence rules.
-
-
-SECRET_PATTERN = re.compile(
-    r"(?i)(token|secret|password|cookie|authorization|api[_-]?key)(\s*[:=]\s*)([^\s,;]+)"
-)  # Persist the key name while removing its sensitive value.
-
-
-def redact(text: str, limit: int = 4000) -> str:
-    """Bound diagnostics and replace common credential values before display or persistence."""
-    bounded = text[:limit]  # Probe output is evidence, not an unlimited log transport.
-    return SECRET_PATTERN.sub(r"\1\2[REDACTED]", bounded)
 
 
 def read_manifest(target: Path) -> dict[str, Any] | None:
