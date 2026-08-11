@@ -4,12 +4,13 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB.svg)](https://www.python.org/)
 
-An evidence-first lifecycle and governance CLI for Codex and cross-agent Skills. One Python core
-runs on Windows and Linux; mutating commands preview by default and require `--apply`.
+An evidence-first lifecycle and governance CLI for Codex Skills and plugins. One Python core runs on
+Windows and Linux; mutating commands preview by default and require `--apply`.
 
 ## What it manages
 
 - physical Skill inventory and alias deduplication;
+- read-only Codex plugin and marketplace inventory with honest auth/runtime evidence gaps;
 - canonical Registry plus generated governance reports;
 - explicit Static, Runtime, and Behavior verification;
 - transactional PACKAGE, SOURCE, and HYBRID installation;
@@ -24,6 +25,7 @@ runs on Windows and Linux; mutating commands preview by default and require `--a
 | Capability | Linux | Windows |
 |---|---:|---:|
 | Scan, Registry, reports, governance | ✅ | ✅ |
+| Read-only plugin and marketplace evidence | ✅ | ✅ |
 | Verify and portable `{python}` probes | ✅ | ✅ |
 | Install/update | ✅ symbolic link | ✅ directory junction |
 | Backup/restore and stable health | ✅ | ✅ |
@@ -74,6 +76,9 @@ skill scan
 skill registry
 skill registry --apply
 skill governance --apply
+skill plugins
+skill plugins --available
+skill plugins --codex-command /exact/path/to/codex
 skill verify --target-skill PATH --apply
 skill install SOURCE --mode source
 skill install SOURCE --mode source --apply
@@ -91,8 +96,9 @@ skill health
 Preview and applied operations return structured JSON. `PASS`, `BLOCKED`, `UNKNOWN`,
 `NOT_CONFIGURED`, and `NOT_RUN` are evidence states—not interchangeable success labels.
 
-Read [SKILL.md](SKILL.md) for the agent workflow and `references/` for Registry, verification,
-mutation, governance, stability, and V5 supply-chain contracts.
+Read [SKILL.md](SKILL.md) for the agent workflow and [plugin governance](references/plugin-governance.md)
+for the installation/source/auth/runtime evidence split. The other `references/` documents cover
+Registry, verification, mutation, governance, stability, and V5 supply-chain contracts.
 
 ## Safety model
 
@@ -100,7 +106,7 @@ mutation, governance, stability, and V5 supply-chain contracts.
 - Git state is pinned to full commits and updates must prove fast-forward ancestry;
 - scheduled Guardian work publishes reports but cannot enter an install or update transaction;
 - compatibility stays `UNKNOWN` unless a declared bounded probe supplies direct evidence;
-- no risk tier permits unattended production updates in V5.2;
+- no risk tier permits unattended production updates in V5.3;
 - verification uses argument arrays, bounded output, timeouts, and credential redaction;
 - backups do not follow activity links and restores do not silently recreate host-specific links;
 - stable health never fetches, installs, updates, or writes;

@@ -1,6 +1,6 @@
 ---
 name: skill-lifecycle-manager
-description: Manage and govern the lifecycle of Codex and cross-agent Skills on Windows and Linux with a Python 3.12 and uv CLI. Use to inventory or classify Skills, generate the canonical Registry, run daily scan-only Guardian checks, publish update and compatibility reports, require exact human approval before source updates, verify Skills, install or update transactionally, back up or restore capabilities, freeze a stable baseline, or run zero-write health checks.
+description: Manage and govern Codex Skills and plugin evidence on Windows and Linux with a Python 3.12 and uv CLI. Use to inventory or classify Skills, observe plugins and marketplaces without writes, generate the canonical Registry, run daily scan-only Guardian checks, publish update and compatibility reports, require exact human approval before source updates, verify Skills, install or update Skills transactionally, back up or restore capabilities, freeze a stable baseline, or run zero-write health checks.
 ---
 
 # Skill Lifecycle Manager
@@ -29,6 +29,8 @@ activity entries, observed Registry state, verification evidence, and recovery m
 14. Guardian scheduling runs only `guardian scan --apply`; no policy tier authorizes unattended
     install, update, activation, project-log editing, or dependency repair.
 15. Compatibility remains `UNKNOWN` unless a declared bounded probe supplies direct evidence.
+16. Plugin installation and enabled metadata never prove connector authorization, runtime injection,
+    or representative behavior; keep those evidence layers `UNKNOWN`, `NOT_CONFIGURED`, or `NOT_RUN`.
 
 ## Command entry
 
@@ -67,6 +69,19 @@ skill verify --target-skill PATH --apply
 A legacy Skill without `skill.manifest.yaml` keeps Static verification while Runtime and Behavior
 report `NOT_CONFIGURED`. Manifests use a JSON-compatible YAML subset, argument arrays, and the
 portable `{python}` placeholder. Read [references/verification-v2.md](references/verification-v2.md).
+
+## Plugin evidence
+
+```text
+skill plugins
+skill plugins --available
+skill plugins --codex-command /exact/path/to/codex
+```
+
+Plugin observation is read-only and separate from the Skill Registry. It records Codex CLI identity,
+installed/enabled metadata, marketplace identity and local path topology while leaving connector
+authentication and runtime behavior unclaimed. Read
+[references/plugin-governance.md](references/plugin-governance.md) before consuming these fields.
 
 ## Install, update, backup, and restore
 
