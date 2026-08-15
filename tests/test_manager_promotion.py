@@ -403,6 +403,8 @@ class RealManagerPromotionTests(unittest.TestCase):
         identity = json.loads(self._run([str(self.formal_cli), "--version"], env=self.uv_environment).stdout)
         self.assertEqual(identity["managerVersion"], "5.4.0")
         self.assertEqual(identity["sourceCommit"], self.new_commit)
+        metadata = list(self.tool_dir.glob("skill-lifecycle-manager/lib/python*/site-packages/skill_lifecycle_manager-5.4.0.dist-info/METADATA"))
+        self.assertEqual(len(metadata), 1)
         self.assertEqual(result["health"]["status"], "PASS")
         self.assertEqual(result["health"]["mutations"], 0)
         baseline = json.loads(self.host.baseline_path.read_text(encoding="utf-8"))

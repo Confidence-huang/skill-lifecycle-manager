@@ -7,6 +7,7 @@ import sys  # Declare the exact test interpreter instead of depending on a bare 
 import tempfile  # Keep every Registry, report, repository, and approval below a disposable root.
 import unittest  # Run Guardian acceptance with the dependency-light standard library.
 from pathlib import Path  # Preserve exact local paths in Registry and report evidence.
+from unittest.mock import patch  # Isolate PACKAGE CLI discovery from the developer's live PATH.
 
 from jsonschema import Draft202012Validator, FormatChecker  # Prove published Guardian evidence matches its public contract.
 
@@ -187,7 +188,8 @@ class GuardianApprovalTests(unittest.TestCase):
         """Bind a PACKAGE approval to one immutable Guardian version pair without applying it."""
         with tempfile.TemporaryDirectory() as temporary:
             host = freshness_fixture(Path(temporary))
-            scan = scan_guardian(host, apply=True, observed_at="2026-08-08T01:02:03Z")
+            with patch("skill_lifecycle.freshness.shutil.which", return_value=None):
+                scan = scan_guardian(host, apply=True, observed_at="2026-08-08T01:02:03Z")
             approval = approve_guardian_update(
                 host,
                 report_path=Path(scan["jsonPath"]),
