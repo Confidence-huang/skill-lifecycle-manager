@@ -15,7 +15,8 @@
 The installer does not overwrite or merge an existing active Skill. Collision resolution is a separate review because equal names do not establish equal contents.
 
 For PACKAGE mode, `.skill-lifecycle.json` preserves the installation input and optional immutable
-Git evidence. Its optional `updates` object may configure a read-only stable-release channel:
+Git evidence. Its optional `updates` object may configure a stable-release channel and, when every
+field below is present, one Linux-native transaction driver:
 
 ```json
 {
@@ -23,7 +24,16 @@ Git evidence. Its optional `updates` object may configure a read-only stable-rel
   "repository": "https://github.com/github/spec-kit.git",
   "tagPrefix": "v",
   "baselineVersion": "0.13.0",
-  "cli": {"command": "specify", "arguments": ["version"]}
+  "baselineCommit": "9a30db484b0876cb7e5a391cf735d59bd968e985",
+  "cli": {"command": "specify", "arguments": ["version"]},
+  "packageTransaction": {
+    "driver": "uv-tool-git",
+    "distribution": "specify-cli",
+    "executable": "specify",
+    "versionArguments": ["version"],
+    "helpArguments": ["--help"],
+    "smokeArguments": [["integration", "--help"]]
+  }
 }
 ```
 
@@ -32,11 +42,14 @@ configured record. The command accepts only exact `MAJOR.MINOR.PATCH` tags under
 uses `git ls-remote --tags` without fetch, and reports the optional CLI as `INSTALLED`,
 `NOT_INSTALLED`, `NOT_CONFIGURED`, or `UNKNOWN`. Comparison reports `CURRENT`,
 `UPDATE_AVAILABLE`, `AHEAD`, `UNKNOWN`, or `NOT_CONFIGURED`. Every path reports `mutations: 0`.
-GitHub CLI is neither invoked nor required.
+GitHub CLI is neither invoked nor required. A legacy adapter can adopt this driver through
+`skill package-configure --name NAME --contract CONTRACT.json --apply`; that command verifies the
+declared baseline commit against its exact stable tag, snapshots the adapter and generated state,
+publishes Registry evidence, and rolls back on failure.
 
 Verification never repairs a missing module, executable, dependency, environment variable, or behavior result. `UNKNOWN` means the probe could not establish the fact; `BLOCKED` means the declared contract was executed or parsed and failed.
 
-## Update transaction
+## SOURCE/HYBRID update transaction
 
 1. Read the canonical JSON Registry.
 2. Require one clean Git repository per selected asset.
@@ -54,6 +67,30 @@ Verification never repairs a missing module, executable, dependency, environment
 No worktree change occurs before the final fast-forward. A fetch or validation failure therefore needs cleanup, not history rewriting.
 V5.2 requires both `--approval` and `--evaluated-at` for a changing source update. Preview remains
 zero-write and needs neither value.
+
+## PACKAGE update transaction
+
+V5.4 supports only a real, evidence-backed `uv-tool-git` driver on Linux. It does not pretend a
+PACKAGE is a Skill source and does not infer pip, npm, cargo, apt, binaries, or install scripts.
+
+1. **DISCOVER / RESOLVE:** read the Registry contract, baseline version/commit, uv tool/bin roots,
+   and newest stable tag; peel annotated tags and bind the candidate to one full commit.
+2. **PREVIEW:** report versions, commits, source, affected paths, dependency/config impact, literal
+   argument-array commands, rollback strategy, and risk flags with zero mutations.
+3. **APPROVE:** require the immutable Guardian report and approval to match both version and commit
+   pairs, Registry fingerprint, policy, and expiry.
+4. **SNAPSHOT:** acquire the global PACKAGE lock and hash/copy the complete adapter directory, uv
+   tool directory, executable link, shared uv metadata, Registry, and generated reports.
+5. **APPLY:** install from `git+REPOSITORY@FULL_COMMIT`; neither tag nor branch reaches uv apply.
+6. **VERIFY:** require the executable inside the managed tool, exact version output, help and smoke
+   commands, receipt commit/distribution, lifecycle metadata, and regenerated Registry identity.
+7. **COMMIT:** retain the transaction journal and verified restore manifest.
+
+Apply or verification failure enters `ROLLING_BACK`, restores the declared nodes in reverse order,
+rehashes every restored preimage, and records `ROLLED_BACK`. If restoration cannot be proved, the
+transaction records `FAILED` and retains its lock for manual recovery. Snapshot failure, an unknown
+version/source, an unpinned candidate, an undeclared driver, unsafe path, absent uv, or an existing
+lock produces a specific `BLOCKED` diagnostic before apply.
 
 ## Backup transaction
 

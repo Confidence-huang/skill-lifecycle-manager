@@ -27,7 +27,7 @@ class ManagerIdentityTests(unittest.TestCase):
         identity = json.loads(completed.stdout)
         self.assertEqual(identity["status"], "PASS")
         self.assertEqual(identity["action"], "MANAGER_IDENTITY")
-        self.assertEqual(identity["managerVersion"], "5.3.0")
+        self.assertEqual(identity["managerVersion"], "5.4.0")
         self.assertTrue(re.fullmatch(r"[0-9a-f]{40}", identity["sourceCommit"]))
         self.assertTrue(re.fullmatch(r"[0-9a-f]{40}", identity["sourceTree"]))
         self.assertTrue(re.fullmatch(r"[0-9A-F]{64}", identity["identitySHA256"]))

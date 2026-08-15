@@ -31,6 +31,9 @@ activity entries, observed Registry state, verification evidence, and recovery m
 15. Compatibility remains `UNKNOWN` unless a declared bounded probe supplies direct evidence.
 16. Plugin installation and enabled metadata never prove connector authorization, runtime injection,
     or representative behavior; keep those evidence layers `UNKNOWN`, `NOT_CONFIGURED`, or `NOT_RUN`.
+17. PACKAGE mutation is Linux-only and fail-closed. Require a validated `uv-tool-git` contract,
+    exact baseline/candidate commits, Guardian approval, a verified snapshot, and a runnable health
+    check; never substitute a moving branch, `latest`, install script, or system-level side effect.
 
 ## Command entry
 
@@ -89,6 +92,8 @@ authentication and runtime behavior unclaimed. Read
 skill install SOURCE --mode package
 skill install SOURCE --mode source --apply
 skill install SOURCE --mode hybrid --skill-path skills/NAME --apply
+skill package-configure --name NAME --contract CONTRACT.json
+skill package-configure --name NAME --contract CONTRACT.json --apply
 skill update --name NAME
 skill update --name NAME --approval APPROVAL.json --evaluated-at TIMESTAMP --apply
 skill updates --name NAME
@@ -96,9 +101,11 @@ skill backup --path PATH --apply
 skill restore --backup-path BACKUP --destination EMPTY_PATH --apply
 ```
 
-Installation publishes Registry evidence only after required probes pass. Update never uses an
-unchecked pull or history rewrite. Restore returns link records for review instead of silently
-recreating machine-specific topology. Read [references/operations.md](references/operations.md).
+Installation publishes Registry evidence only after required probes pass. Source update never uses
+an unchecked pull or history rewrite. A PACKAGE update uses its declared adapter, durable lock,
+verified preimages, exact Git commit, smoke checks, and automatic rollback before publishing
+`COMMITTED`. Restore returns link records for review instead of silently recreating machine-specific
+topology. Read [references/operations.md](references/operations.md).
 
 ## Daily Guardian
 

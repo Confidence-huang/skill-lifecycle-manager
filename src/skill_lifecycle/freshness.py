@@ -44,8 +44,8 @@ def version_parts(version: str) -> tuple[int, int, int]:
 
 
 # --- Resolve the newest exact stable tag ---
-def latest_tag(repository: str, tag_prefix: str) -> tuple[str | None, str | None]:
-    """Read remote tag refs without fetching objects or modifying any repository."""
+def resolve_release(repository: str, tag_prefix: str) -> tuple[str | None, str | None, str | None, str | None]:
+    """Resolve the newest stable tag to its exact peeled commit without fetching objects."""
     try:
         completed = subprocess.run(
             ["git", "ls-remote", "--tags", repository],
@@ -55,23 +55,41 @@ def latest_tag(repository: str, tag_prefix: str) -> tuple[str | None, str | None
             timeout=GIT_TIMEOUT_SECONDS,
         )  # The repository remains one literal argument even when it is a URL.
     except (OSError, subprocess.TimeoutExpired) as error:
-        return None, f"Git tag inspection failed: {error}"
+        return None, None, None, f"Git tag inspection failed: {error}"
     if completed.returncode:
         detail = completed.stderr.strip() or f"git exited {completed.returncode}"
-        return None, f"Git tag inspection failed: {detail}"
+        return None, None, None, f"Git tag inspection failed: {detail}"
 
     ref_pattern = re.compile(rf"^refs/tags/{re.escape(tag_prefix)}([0-9]+\.[0-9]+\.[0-9]+)$")
-    versions: list[str] = []
+    peeled_pattern = re.compile(rf"^refs/tags/{re.escape(tag_prefix)}([0-9]+\.[0-9]+\.[0-9]+)\^\{{\}}$")
+    direct: dict[str, str] = {}
+    peeled: dict[str, str] = {}
     for line in completed.stdout.splitlines():
         fields = line.split(maxsplit=1)  # Git returns `<object> <ref>` for each remote tag.
         if len(fields) != 2:
             continue  # An incomplete line is not release evidence.
-        match = ref_pattern.fullmatch(fields[1])
-        if match:
-            versions.append(match.group(1))  # Prerelease and unrelated tags never enter comparison.
-    if not versions:
-        return None, "No stable release tags matched the configured prefix."
-    return max(versions, key=version_parts), None
+        object_id, reference = fields
+        if not re.fullmatch(r"[0-9a-f]{40}", object_id):
+            continue  # A malformed object ID cannot become immutable update evidence.
+        peeled_match = peeled_pattern.fullmatch(reference)
+        if peeled_match:
+            peeled[peeled_match.group(1)] = object_id  # Annotated tags bind to the underlying commit.
+            continue
+        direct_match = ref_pattern.fullmatch(reference)
+        if direct_match:
+            direct[direct_match.group(1)] = object_id  # Lightweight tags already point at a commit.
+    if not direct:
+        return None, None, None, "No stable release tags matched the configured prefix."
+    version = max(direct, key=version_parts)
+    tag = f"{tag_prefix}{version}"
+    commit = peeled.get(version, direct[version])
+    return version, tag, commit, None
+
+
+def latest_tag(repository: str, tag_prefix: str) -> tuple[str | None, str | None]:
+    """Preserve the earlier helper while delegating identity resolution to the exact release contract."""
+    version, _, _, issue = resolve_release(repository, tag_prefix)
+    return version, issue
 
 
 # --- Inspect one optional companion CLI ---
@@ -117,7 +135,9 @@ def check_record(record: dict[str, Any]) -> dict[str, Any]:
     cli_status, installed, cli_issue = cli_version(contract.get("cli"))
     current = installed or baseline  # A missing CLI falls back to adapter compatibility, never an invented installation.
     current_source = "CLI" if installed else "ADAPTER_BASELINE"
-    latest, tag_issue = latest_tag(contract["repository"], contract["tagPrefix"])
+    latest, candidate_tag, candidate_commit, tag_issue = resolve_release(
+        contract["repository"], contract["tagPrefix"]
+    )
     issue = cli_issue or tag_issue
     if issue or latest is None or cli_status == "UNKNOWN":
         update_status = "UNKNOWN"
@@ -139,6 +159,8 @@ def check_record(record: dict[str, Any]) -> dict[str, Any]:
         "currentVersion": current,
         "currentVersionSource": current_source,
         "latestVersion": latest,
+        "candidateTag": candidate_tag,
+        "candidateCommit": candidate_commit,
         "updateStatus": update_status,
         "issue": issue,
         "mutations": 0,

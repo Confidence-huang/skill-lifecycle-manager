@@ -33,6 +33,8 @@ CAPABILITY_RULES = {
 
 STABLE_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")  # PACKAGE baselines exclude prerelease ambiguity.
 TAG_PREFIX = re.compile(r"^[A-Za-z0-9._-]{0,32}$")  # A short literal prefix cannot become an open-ended ref expression.
+PACKAGE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")  # uv distribution and entrypoint names stay literal.
+GIT_COMMIT = re.compile(r"^[0-9a-f]{40}$")  # Exact package baselines never use branches or moving labels.
 
 
 def utc_now() -> str:
@@ -78,7 +80,9 @@ def validate_updates(updates: Any) -> tuple[dict[str, Any] | None, list[str]]:
     repository = updates.get("repository")  # The reviewed Git endpoint is passed as one argument.
     tag_prefix = updates.get("tagPrefix", "v")  # Literal `v` matches common stable release tags.
     baseline = updates.get("baselineVersion")  # Adapter compatibility remains distinct from live CLI state.
+    baseline_commit = updates.get("baselineCommit")  # Optional V5.4 evidence pins the reviewed release commit.
     cli = updates.get("cli")  # CLI evidence is optional for packages without a companion executable.
+    transaction = updates.get("packageTransaction")  # Only declared adapters may cross the PACKAGE mutation seam.
     issues: list[str] = []
     if strategy != "git-tags":
         issues.append("Installed-package update strategy must be git-tags.")
@@ -88,6 +92,8 @@ def validate_updates(updates: Any) -> tuple[dict[str, Any] | None, list[str]]:
         issues.append("Installed-package tagPrefix must be a short literal ref prefix.")
     if not isinstance(baseline, str) or not STABLE_VERSION.fullmatch(baseline):
         issues.append("Installed-package baselineVersion must be MAJOR.MINOR.PATCH.")
+    if baseline_commit is not None and (not isinstance(baseline_commit, str) or not GIT_COMMIT.fullmatch(baseline_commit)):
+        issues.append("Installed-package baselineCommit must be one full lowercase Git commit.")
     if cli is not None:
         if not isinstance(cli, dict):
             issues.append("Installed-package cli contract must be an object.")
@@ -98,15 +104,54 @@ def validate_updates(updates: Any) -> tuple[dict[str, Any] | None, list[str]]:
                 issues.append("Installed-package cli command must be a non-empty string.")
             if not isinstance(arguments, list) or not all(isinstance(item, str) for item in arguments):
                 issues.append("Installed-package cli arguments must be a string array.")
+    normalized_transaction = None
+    if transaction is not None:
+        required = {"driver", "distribution", "executable", "versionArguments", "helpArguments", "smokeArguments"}
+        if not isinstance(transaction, dict) or set(transaction) != required:
+            issues.append(f"Installed-package transaction fields must be exactly {sorted(required)}.")
+        else:
+            driver = transaction.get("driver")
+            distribution = transaction.get("distribution")
+            executable = transaction.get("executable")
+            version_arguments = transaction.get("versionArguments")
+            help_arguments = transaction.get("helpArguments")
+            smoke_arguments = transaction.get("smokeArguments")
+            if driver != "uv-tool-git":
+                issues.append("Installed-package transaction driver must be uv-tool-git.")
+            if not isinstance(distribution, str) or not PACKAGE_NAME.fullmatch(distribution):
+                issues.append("Installed-package transaction distribution is unsafe.")
+            if not isinstance(executable, str) or not PACKAGE_NAME.fullmatch(executable):
+                issues.append("Installed-package transaction executable is unsafe.")
+            argument_sets = (version_arguments, help_arguments)
+            if any(not isinstance(values, list) or not values or len(values) > 32 or any(not isinstance(item, str) or len(item) > 1024 for item in values) for values in argument_sets):
+                issues.append("Installed-package transaction version/help arguments must be non-empty bounded string arrays.")
+            if not isinstance(smoke_arguments, list) or len(smoke_arguments) > 8 or any(not isinstance(values, list) or not values or len(values) > 32 or any(not isinstance(item, str) or len(item) > 1024 for item in values) for values in smoke_arguments):
+                issues.append("Installed-package transaction smokeArguments must be bounded argument arrays.")
+            if isinstance(cli, dict) and executable != cli.get("command"):
+                issues.append("Installed-package transaction executable must match the freshness CLI command.")
+            if not issues:
+                normalized_transaction = {
+                    "driver": driver,
+                    "distribution": distribution,
+                    "executable": executable,
+                    "versionArguments": list(version_arguments),
+                    "helpArguments": list(help_arguments),
+                    "smokeArguments": [list(values) for values in smoke_arguments],
+                }
     if issues:
         return None, issues  # Invalid contracts stay visible but can never trigger a subprocess.
-    return {
+    normalized = {
         "strategy": strategy,
         "repository": repository.strip(),
         "tagPrefix": tag_prefix,
         "baselineVersion": baseline,
         "cli": cli,
-    }, []  # Registry stores the normalized executable contract, not unrelated package metadata.
+    }
+    if baseline_commit is not None:
+        normalized["baselineCommit"] = baseline_commit
+    if normalized_transaction is not None:
+        normalized["packageTransaction"] = normalized_transaction
+    return normalized, []  # Registry preserves legacy optional fields while normalizing declared adapters.
 
 
 # --- Read PACKAGE provenance beside one physical Skill ---

@@ -33,7 +33,7 @@ between Windows and Linux; paths or link types from the previous host are histor
 | `branch` | Current local branch when available. |
 | `commit` | Full local commit SHA when available. |
 | `lifecycleSHA256` | Hash of optional `.skill-lifecycle.json` PACKAGE provenance; null when absent. |
-| `updates` | Validated zero-write PACKAGE release contract; null when not configured. |
+| `updates` | Validated PACKAGE release contract; optional `baselineCommit` and `packageTransaction` enable exact Linux `uv-tool-git` transactions. |
 | `entryCount` | Eligible `SKILL.md` entries in the containing Git repository. |
 | `issues` | Exact reasons for `BLOCKED` or `UNKNOWN`, never hidden behind a generic health score. |
 | `isTopLevel` | Whether any activation path is a direct child of a scanned root. |

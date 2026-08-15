@@ -16,6 +16,7 @@ from skill_lifecycle.inventory import write_registry  # Build the canonical obse
 from skill_lifecycle.operations import update_skill  # Prove approval gates the existing transaction.
 from skill_lifecycle.paths import LifecycleBlocked  # Assert literal safety stops.
 from support import create_git_skill, git, layout, link_directory  # Reuse cross-platform Skill fixtures.
+from test_freshness import freshness_fixture  # Reuse one configured PACKAGE stable-tag fixture.
 
 
 # --- Create one managed source with a newer remote commit ---
@@ -181,6 +182,35 @@ class GuardianApprovalTests(unittest.TestCase):
         self.assertEqual(result["action"], "UPDATED")
         self.assertEqual(updated, candidate)
         self.assertEqual(approval_errors, [])
+
+    def test_package_update_can_receive_exact_version_approval(self) -> None:
+        """Bind a PACKAGE approval to one immutable Guardian version pair without applying it."""
+        with tempfile.TemporaryDirectory() as temporary:
+            host = freshness_fixture(Path(temporary))
+            scan = scan_guardian(host, apply=True, observed_at="2026-08-08T01:02:03Z")
+            approval = approve_guardian_update(
+                host,
+                report_path=Path(scan["jsonPath"]),
+                name="spec-kit",
+                decision_id="approval-44444444-4444-4444-8444-444444444444",
+                requested_by="fixture-user",
+                requested_at="2026-08-08T01:05:00Z",
+                decided_by="fixture-user",
+                decided_at="2026-08-08T01:06:00Z",
+                expires_at="2026-08-09T01:06:00Z",
+                reason="Reviewed exact PACKAGE candidate.",
+                apply=True,
+            )
+
+            schema = json.loads((Path(__file__).resolve().parents[1] / "schemas" / "update-approval.schema.json").read_text(encoding="utf-8"))
+            errors = list(Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(approval["approval"]))
+
+        self.assertEqual(approval["approval"]["lifecycleMode"], "PACKAGE")
+        self.assertEqual(approval["approval"]["current"], "0.13.0")
+        self.assertEqual(approval["approval"]["candidate"], "0.16.0")
+        self.assertRegex(approval["approval"]["currentCommit"], r"^[0-9a-f]{40}$")
+        self.assertRegex(approval["approval"]["candidateCommit"], r"^[0-9a-f]{40}$")
+        self.assertEqual(errors, [])
 
     def test_expired_approval_is_blocked_before_fetch_or_merge(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
