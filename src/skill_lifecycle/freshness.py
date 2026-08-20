@@ -128,6 +128,14 @@ def check_record(record: dict[str, Any]) -> dict[str, Any]:
         remote = record.get("remote")
         commit = record.get("commit")
         branch = record.get("branch") or "main"
+        local_source = record.get("sourceRepository")
+        if not remote and local_source and Path(local_source).is_dir() and (Path(local_source) / ".git").exists():
+            try:
+                local_head = subprocess.run(["git", "-C", local_source, "rev-parse", "HEAD"], text=True, capture_output=True, check=False, timeout=5).stdout.strip()
+            except (OSError, subprocess.TimeoutExpired):
+                local_head = None
+            status = "CURRENT_LOCAL_ONLY" if local_head and local_head == commit else ("LOCAL_DRIFT" if local_head else "UNKNOWN")
+            return {"name": record.get("name"), "lifecycleMode": record.get("lifecycleMode"), "strategy": "local-repository", "repository": local_source, "branch": branch, "currentCommit": commit, "observedCommit": local_head, "updateStatus": status, "risk": "MEDIUM", "recommendation": "Configure an upstream remote before updating" if status != "CURRENT_LOCAL_ONLY" else "No upstream freshness claim", "issue": "No upstream remote configured", "mutations": 0}
         if remote and isinstance(remote, str) and remote.startswith(("https://", "ssh://", "git@")):
             latest_commit, issue = resolve_branch(remote, branch)
             status = "UNKNOWN" if issue or not latest_commit else ("CURRENT" if latest_commit == commit else "UPDATE_AVAILABLE")
@@ -199,11 +207,11 @@ def check_updates(layout: HostLayout, name: str | None) -> dict[str, Any]:
         if len(selected) != 1:  # Equal names with multiple physical entries cannot choose one update channel safely.
             raise LifecycleBlocked(f"Expected one Registry record named {name}, found {len(selected)}.")
     else:
-        selected = [record for record in records if record.get("updates") or record.get("remote")]  # v6 checks declared SOURCE/HYBRID remotes too.
+        selected = [record for record in records if record.get("updates") or record.get("remote") or record.get("sourceRepository")]  # v6 checks declared SOURCE/HYBRID remotes and local evidence too.
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         updates = list(pool.map(check_record, selected))
-    states = ("CURRENT", "UPDATE_AVAILABLE", "AHEAD", "UNKNOWN", "NOT_CONFIGURED")
+    states = ("CURRENT", "CURRENT_LOCAL_ONLY", "LOCAL_DRIFT", "UPDATE_AVAILABLE", "AHEAD", "UNKNOWN", "NOT_CONFIGURED")
     summary = {state: sum(update["updateStatus"] == state for update in updates) for state in states}
     status = "UNKNOWN" if summary["UNKNOWN"] else "PASS"
     return {
