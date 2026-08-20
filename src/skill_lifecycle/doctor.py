@@ -9,6 +9,9 @@ from typing import Any
 
 from skill_lifecycle.manager_identity import manager_identity
 from skill_lifecycle.plugin_inventory import scan_plugins
+from skill_lifecycle.runtime_inspector import inspect_runtime
+from skill_lifecycle.migration_checker import inspect_migration
+from skill_lifecycle.cache_manager import inspect_caches
 from skill_lifecycle.stability import health
 from skill_lifecycle.paths import HostLayout
 
@@ -32,9 +35,11 @@ def doctor(host: HostLayout, project_root: Path | None = None, codex_command: st
     identity = manager_identity()
     skill_health = health(host, project_root)
     plugins = scan_plugins(codex_command, include_available=False)
-    tools = {name: _tool(name) for name in ("git", "uv", "python3", "node", "go", "rustc")}
-    migration = {"status": "UNKNOWN", "message": "v6 migration checker not yet enabled; no cleanup performed."}
+    runtime = inspect_runtime()
+    tools = runtime["tools"]
+    migration = inspect_migration([Path.home() / ".local/share", Path.home() / ".config", Path.home() / ".cache", Path.home() / ".codex"])
     mcp = {"status": "NOT_CONFIGURED", "message": "No independent MCP registry is configured."}
+    caches = inspect_caches([Path.home() / ".cache", Path.home() / ".codex/cache", Path.home() / ".local/share/skill-lifecycle-manager"])
     overall = "PASS"
     if skill_health.get("status") != "PASS" or any(item["status"] != "PASS" for item in tools.values() if item["path"]):
         overall = "WARN"
@@ -42,11 +47,12 @@ def doctor(host: HostLayout, project_root: Path | None = None, codex_command: st
         "status": overall,
         "action": "DOCTOR_CHECKED",
         "manager": identity,
-        "environment": tools,
+        "environment": runtime,
         "skills": skill_health,
         "plugins": plugins,
         "mcp": mcp,
         "migration": migration,
+        "cache": caches,
         "update": {"status": "NOT_RUN", "available": None},
         "mutations": 0,
     }

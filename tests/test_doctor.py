@@ -23,7 +23,7 @@ class DoctorTests(unittest.TestCase):
             result = doctor(host, Path("/tmp/project"))
         self.assertEqual(result["action"], "DOCTOR_CHECKED")
         self.assertEqual(result["mcp"]["status"], "NOT_CONFIGURED")
-        self.assertEqual(result["migration"]["status"], "UNKNOWN")
+        self.assertIn(result["migration"]["status"], {"PASS", "WARN"})
         self.assertEqual(result["update"]["status"], "NOT_RUN")
         self.assertEqual(result["mutations"], 0)
 
