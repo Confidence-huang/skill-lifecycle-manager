@@ -17,10 +17,11 @@ from pathlib import Path  # Compare local plugin sources with marketplace roots 
 from typing import Any  # Describe the normalized JSON document returned to callers.
 
 from skill_lifecycle.diagnostics import redact  # Prevent CLI failures from returning credential values.
+from skill_lifecycle import __version__  # Keep evidence provenance aligned with the running manager.
 from skill_lifecycle.paths import LifecycleBlocked  # Reuse the manager's fail-closed command gate.
 
 
-GENERATOR = "skill-lifecycle-manager/5.3.0"  # Identify the first read-only plugin evidence contract.
+GENERATOR = f"skill-lifecycle-manager/{__version__}"  # Bind plugin evidence to the running manager release.
 COMMAND_TIMEOUT_SECONDS = 30  # Inventory commands must not become an unbounded Desktop health probe.
 DIAGNOSTIC_LIMIT = 400  # Preserve useful failures without returning arbitrary subprocess output.
 

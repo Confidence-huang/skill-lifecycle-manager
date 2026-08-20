@@ -15,6 +15,7 @@ from pathlib import Path  # Preserve POSIX paths from the CLI boundary.
 from typing import Any  # Describe the structured result passed to the renderer.
 
 from skill_lifecycle.freshness import check_updates  # Compare configured PACKAGE releases without writes or fetch.
+from skill_lifecycle.doctor import doctor  # Aggregate bounded v6 environment evidence without writes.
 from skill_lifecycle.guardian import approve_guardian_update, publish_guardian_policy, scan_guardian, schedule_guardian  # Run policy, daily scan, approval, and scheduling commands.
 from skill_lifecycle.inventory import governance_result, registry_result, report_result, scan_skills, write_registry  # Read and publish inventory evidence.
 from skill_lifecycle.manager_identity import manager_identity  # Report exact package and source identity without writes.
@@ -183,6 +184,10 @@ def parser() -> argparse.ArgumentParser:
 
     health_parser = commands.add_parser("health", help="Compare frozen local evidence without writes or fetch")
     health_parser.add_argument("--project-root", type=Path)
+    doctor_parser = commands.add_parser("doctor", help="Read-only AI development environment health report")
+    doctor_parser.add_argument("--project-root", type=Path)
+    doctor_parser.add_argument("--codex-command", default="codex")
+    doctor_parser.add_argument("--json", action="store_true", help="Emit the canonical JSON report")
     return root
 
 
@@ -248,6 +253,8 @@ def execute(arguments: argparse.Namespace, host: HostLayout) -> dict[str, Any]:
         return check_updates(host, arguments.name)
     if arguments.command == "plugins":
         return scan_plugins(arguments.codex_command, arguments.available)
+    if arguments.command == "doctor":
+        return doctor(host, arguments.project_root, arguments.codex_command)
     if arguments.command == "guardian":
         if arguments.guardian_command == "policy":
             return publish_guardian_policy(host, arguments.file, arguments.apply)
