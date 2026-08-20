@@ -12,6 +12,7 @@ from skill_lifecycle.plugin_inventory import scan_plugins
 from skill_lifecycle.runtime_inspector import inspect_runtime
 from skill_lifecycle.migration_checker import inspect_migration
 from skill_lifecycle.cache_manager import inspect_caches
+from skill_lifecycle.mcp_manager import discover_mcp
 from skill_lifecycle.stability import health
 from skill_lifecycle.paths import HostLayout
 
@@ -38,7 +39,7 @@ def doctor(host: HostLayout, project_root: Path | None = None, codex_command: st
     runtime = inspect_runtime()
     tools = runtime["tools"]
     migration = inspect_migration([Path.home() / ".local/share", Path.home() / ".config", Path.home() / ".cache", Path.home() / ".codex"])
-    mcp = {"status": "NOT_CONFIGURED", "message": "No independent MCP registry is configured."}
+    mcp = discover_mcp()
     caches = inspect_caches([Path.home() / ".cache", Path.home() / ".codex/cache", Path.home() / ".local/share/skill-lifecycle-manager"])
     overall = "PASS"
     if skill_health.get("status") != "PASS" or any(item["status"] != "PASS" for item in tools.values() if item["path"]):
