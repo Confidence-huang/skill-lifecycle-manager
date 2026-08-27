@@ -12,18 +12,18 @@ from skill_lifecycle.paths import LifecycleBlocked
 from support import create_git_skill, git, layout, link_directory
 
 
-def update_fixture(root: Path):
+def update_fixture(root: Path, skill_name: str = "updatable"):
     """Create one origin, publisher checkout, managed checkout, and canonical Registry."""
     origin = root / "origin.git"
     git("init", "--bare", str(origin))
-    publisher = create_git_skill(root / "publisher", "updatable", str(origin))
+    publisher = create_git_skill(root / "publisher", skill_name, str(origin))
     git("push", "-u", "origin", "main", cwd=publisher)
     managed = root / "managed"
     git("clone", str(origin), str(managed))
     git("checkout", "main", cwd=managed)
     host = layout(root / "host")
     host.activity_root.mkdir(parents=True)
-    link_directory(host, managed, host.activity_root / "updatable")
+    link_directory(host, managed, host.activity_root / skill_name)
     write_registry(host)
     return host, publisher, managed
 
@@ -91,6 +91,25 @@ class UpdateTests(unittest.TestCase):
                 update_skill(host, "updatable", False)
             local_text = (managed / "local.txt").read_text(encoding="utf-8")
         self.assertEqual(local_text, "keep")
+
+    def test_manager_update_previews_but_apply_requires_dedicated_promotion(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            host, publisher, managed = update_fixture(Path(temporary), "skill-lifecycle-manager")
+            skill_file = publisher / "SKILL.md"
+            skill_file.write_text(skill_file.read_text(encoding="utf-8") + "\nReviewed manager candidate\n", encoding="utf-8")
+            git("add", "--", "SKILL.md", cwd=publisher)
+            git("commit", "-m", "manager candidate", cwd=publisher)
+            candidate = git("rev-parse", "HEAD", cwd=publisher)
+            git("push", "origin", "main", cwd=publisher)
+
+            preview = update_skill(host, "skill-lifecycle-manager", False)
+            with self.assertRaisesRegex(LifecycleBlocked, "preview-only"):
+                update_skill(host, "skill-lifecycle-manager", True)
+            managed_head = git("rev-parse", "HEAD", cwd=managed)
+
+        self.assertEqual(preview["candidate"], candidate)
+        self.assertEqual(preview["mutations"], 0)
+        self.assertNotEqual(managed_head, candidate)
 
 
 if __name__ == "__main__":
