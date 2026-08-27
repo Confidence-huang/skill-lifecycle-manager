@@ -1,10 +1,12 @@
 """Prove cross-platform inventory identity and generated governance views."""
 
+import json  # Inspect the exact machine-readable generator identity written to Registry state.
 import tempfile  # Dispose every activity and state fixture after each assertion.
 import unittest  # Keep acceptance dependency-free under uv.
 import sys  # Keep broken-symlink evidence distinct from Windows junction coverage.
 from pathlib import Path  # Create native files and activity entries.
 
+from skill_lifecycle import __version__
 from skill_lifecycle.inventory import governance_result, registry_result, report_result, scan_skills, write_registry
 from support import create_skill, layout, link_directory, write_lifecycle_record
 
@@ -124,6 +126,7 @@ class InventoryTests(unittest.TestCase):
             yaml_text = host.registry_yaml_path.read_text(encoding="utf-8")
         self.assertEqual(result["action"], "REGISTRY_WRITTEN")
         self.assertEqual(json_text, yaml_text)
+        self.assertEqual(json.loads(json_text)["generator"], f"skill-lifecycle-manager/{__version__}")
 
     def test_report_and_governance_preview_do_not_create_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
