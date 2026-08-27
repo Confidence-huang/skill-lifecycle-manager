@@ -198,15 +198,20 @@ def scan_record(record: dict[str, Any], policy: dict[str, Any] | None) -> dict[s
 
     if not selected["enabled"]:
         current, candidate, update_status, issue = record.get("commit"), None, "DISABLED", "Monitoring is disabled by policy."
+        current_commit, candidate_commit = record.get("commit"), None
     elif record.get("lifecycleMode") in {"SOURCE", "HYBRID"} and record.get("sourceRepository"):
         current, candidate, update_status, issue = inspect_source_update(record)
+        current_commit, candidate_commit = current, candidate
     elif record.get("updates"):
         package = check_record(record)
         current, candidate = package.get("currentVersion"), package.get("latestVersion")
+        current_commit = record["updates"].get("baselineCommit")
+        candidate_commit = package.get("candidateCommit")
         update_status, issue = package["updateStatus"], package.get("issue")
     else:
         current = record.get("commit")
         candidate, update_status, issue = None, "NOT_CONFIGURED", "No supported update channel is configured."
+        current_commit, candidate_commit = record.get("commit"), None
 
     issues = [value for value in [issue, compatibility.get("issue")] if value]
     issues.extend(result["issue"] for result in dependencies if result.get("issue"))
@@ -217,6 +222,8 @@ def scan_record(record: dict[str, Any], policy: dict[str, Any] | None) -> dict[s
         "healthStatus": record.get("status", "UNKNOWN"),
         "current": current,
         "candidate": candidate,
+        "currentCommit": current_commit,
+        "candidateCommit": candidate_commit,
         "updateStatus": update_status,
         "compatibilityStatus": compatibility["status"],
         "riskTier": selected["riskTier"],
@@ -366,10 +373,10 @@ def approve_guardian_update(
     if len(rows) != 1:
         raise LifecycleBlocked(f"Guardian approval expected one report row named {name}, found {len(rows)}.")
     row = rows[0]
-    if row.get("lifecycleMode") not in {"SOURCE", "HYBRID"} or row.get("updateStatus") != "UPDATE_AVAILABLE":
-        raise LifecycleBlocked("Guardian approval requires one SOURCE/HYBRID update candidate.")
-    if not row.get("current") or not row.get("candidate"):
-        raise LifecycleBlocked("Guardian approval requires exact current and candidate commits.")
+    if row.get("lifecycleMode") not in {"SOURCE", "HYBRID", "PACKAGE"} or row.get("updateStatus") != "UPDATE_AVAILABLE":
+        raise LifecycleBlocked("Guardian approval requires one supported update candidate.")
+    if not all(row.get(field) for field in ("current", "candidate", "currentCommit", "candidateCommit")):
+        raise LifecycleBlocked("Guardian approval requires exact current/candidate versions and commits.")
     requested_time = parse_timestamp(requested_at)
     decided_time = parse_timestamp(decided_at)
     expiry_time = parse_timestamp(expires_at)
@@ -393,6 +400,8 @@ def approve_guardian_update(
         "lifecycleMode": row["lifecycleMode"],
         "current": row["current"],
         "candidate": row["candidate"],
+        "currentCommit": row["currentCommit"],
+        "candidateCommit": row["candidateCommit"],
         "registryFingerprint": report["registry"]["inventoryFingerprint"],
         "policyVersion": report["policy"]["version"],
         "policySHA256": report["policy"]["sha256"],
@@ -414,7 +423,17 @@ def approve_guardian_update(
 
 
 # --- Require exact approval immediately before mutation ---
-def require_guardian_approval(layout: HostLayout, approval_path: Path | None, name: str, current: str, candidate: str, evaluated_at: str | None) -> dict[str, Any]:
+def require_guardian_approval(
+    layout: HostLayout,
+    approval_path: Path | None,
+    name: str,
+    current: str,
+    candidate: str,
+    evaluated_at: str | None,
+    *,
+    current_commit: str | None = None,
+    candidate_commit: str | None = None,
+) -> dict[str, Any]:
     """Return one current approval or block before fetch, worktree creation, merge, or Registry write."""
     if approval_path is None or evaluated_at is None:
         raise LifecycleBlocked("Source update apply requires a Guardian approval and --evaluated-at.")
@@ -425,7 +444,13 @@ def require_guardian_approval(layout: HostLayout, approval_path: Path | None, na
     approval = json.loads(approval_path.read_text(encoding="utf-8"))
     if approval.get("documentType") != "SKILL_GUARDIAN_UPDATE_APPROVAL" or approval.get("decision") != "APPROVED":
         raise LifecycleBlocked("Guardian approval document is unsupported or not approved.")
-    expected = {"skillName": name, "current": current, "candidate": candidate}
+    expected = {
+        "skillName": name,
+        "current": current,
+        "candidate": candidate,
+        "currentCommit": current_commit or current,
+        "candidateCommit": candidate_commit or candidate,
+    }
     for field, value in expected.items():
         if approval.get(field) != value:
             raise LifecycleBlocked(f"Guardian approval {field} does not match the live update candidate.")
@@ -436,7 +461,7 @@ def require_guardian_approval(layout: HostLayout, approval_path: Path | None, na
         raise LifecycleBlocked("Guardian approval report evidence is missing or changed.")
     report = json.loads(report_path.read_text(encoding="utf-8"))
     rows = [row for row in report.get("skills", []) if row.get("name") == name]
-    if len(rows) != 1 or rows[0].get("current") != current or rows[0].get("candidate") != candidate:
+    if len(rows) != 1 or any(rows[0].get(field) != value for field, value in expected.items() if field != "skillName"):
         raise LifecycleBlocked("Guardian approval fields do not match their immutable report row.")
     registry = json.loads(layout.registry_path.read_text(encoding="utf-8"))
     if registry.get("inventoryFingerprint") != approval.get("registryFingerprint"):

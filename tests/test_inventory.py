@@ -65,13 +65,24 @@ class InventoryTests(unittest.TestCase):
                     "repository": "https://github.com/github/spec-kit.git",
                     "tagPrefix": "v",
                     "baselineVersion": "0.13.0",
+                    "baselineCommit": "9a30db484b0876cb7e5a391cf735d59bd968e985",
                     "cli": {"command": "specify", "arguments": ["version"]},
+                    "packageTransaction": {
+                        "driver": "uv-tool-git",
+                        "distribution": "specify-cli",
+                        "executable": "specify",
+                        "versionArguments": ["version"],
+                        "helpArguments": ["--help"],
+                        "smokeArguments": [["integration", "--help"]],
+                    },
                 },
             }
             write_lifecycle_record(skill, lifecycle)
             observed = scan_skills([activity])["skills"][0]
         self.assertEqual(observed["origin"], "/reviewed/package")
         self.assertEqual(observed["updates"]["baselineVersion"], "0.13.0")
+        self.assertEqual(observed["updates"]["packageTransaction"]["driver"], "uv-tool-git")
+        self.assertEqual(observed["updates"]["baselineCommit"], "9a30db484b0876cb7e5a391cf735d59bd968e985")
         self.assertIsNotNone(observed["lifecycleSHA256"])
 
     def test_package_lifecycle_change_affects_inventory_fingerprint(self) -> None:

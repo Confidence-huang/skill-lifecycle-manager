@@ -103,5 +103,7 @@ skill update --name easyeda-agent --approval /exact/guardian/approvals/approval-
 ```
 
 The update re-resolves the remote candidate and rejects missing, expired, edited, stale, or
-mismatched approval evidence before fetch. PACKAGE release checks remain reports only because the
-manager does not yet implement a transactional PACKAGE upgrader.
+mismatched approval evidence before mutation. SOURCE/HYBRID approvals bind exact current/candidate
+commits. PACKAGE approvals additionally bind exact stable versions and peeled commits, and can enter
+the Linux `uv-tool-git` PackageTransaction only when snapshot, rollback, and health checks are
+fully declared. Other package managers remain explicitly blocked.

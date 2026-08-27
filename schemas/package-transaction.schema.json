@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skill-lifecycle-manager.local/schemas/v5/package-transaction.schema.json",
+  "title": "Durable PACKAGE lifecycle transaction",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "transactionID", "type", "package", "source", "oldVersion", "oldCommit",
+    "candidateVersion", "candidateCommit", "startedAt", "endedAt", "snapshot", "verification",
+    "rollbackAvailable", "actions", "finalState"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "transactionID": {"$ref": "common.schema.json#/$defs/transactionID"},
+    "type": {"enum": ["PACKAGE", "PACKAGE_CONFIG"]},
+    "package": {"type": "string", "minLength": 1, "maxLength": 128},
+    "source": {"type": "string", "minLength": 1},
+    "oldVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "oldCommit": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}$"},
+    "candidateVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "candidateCommit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "startedAt": {"type": "string", "format": "date-time"},
+    "endedAt": {"type": ["string", "null"], "format": "date-time"},
+    "snapshot": {"type": ["string", "null"]},
+    "verification": {"type": ["object", "null"]},
+    "rollbackAvailable": {"type": "boolean"},
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sequence", "state", "at"],
+        "properties": {
+          "sequence": {"type": "integer", "minimum": 1},
+          "state": {"enum": ["PREVIEWED", "APPROVED", "SNAPSHOTTED", "APPLYING", "VERIFYING", "COMMITTED", "ROLLING_BACK", "ROLLED_BACK", "FAILED", "BLOCKED"]},
+          "at": {"type": "string", "format": "date-time"}
+        }
+      }
+    },
+    "finalState": {"enum": ["PREVIEWED", "APPROVED", "SNAPSHOTTED", "APPLYING", "VERIFYING", "COMMITTED", "ROLLING_BACK", "ROLLED_BACK", "FAILED", "BLOCKED"]}
+  }
+}

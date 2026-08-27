@@ -14,7 +14,7 @@ Windows and Linux; mutating commands preview by default and require `--apply`.
 - canonical Registry plus generated governance reports;
 - explicit Static, Runtime, and Behavior verification;
 - transactional PACKAGE, SOURCE, and HYBRID installation;
-- validated fast-forward source updates and read-only release checks;
+- validated fast-forward source updates plus Linux uv-tool PACKAGE transactions with exact Git identities;
 - scan-only daily Guardian reports with declared dependency and compatibility probes;
 - exact, expiring human approvals required before source updates are applied;
 - link-aware backups, verified restores, immutable baselines, and zero-write health checks;
@@ -32,6 +32,7 @@ Windows and Linux; mutating commands preview by default and require `--apply`.
 | V5 contract and shadow validation | ✅ | ✅ |
 | Daily Guardian scan/report scheduling | ✅ systemd user timer | ✅ Task Scheduler |
 | Guardian approval-gated source updates | ✅ | ✅ |
+| Guardian approval-gated `uv-tool-git` PACKAGE updates | ✅ | Explicitly blocked |
 | Reviewed Phase D pilot activation | ✅ | Not yet verified |
 | Offline manager self-promotion/rehearsal | ✅ | Not yet verified |
 
@@ -82,6 +83,7 @@ skill plugins --codex-command /exact/path/to/codex
 skill verify --target-skill PATH --apply
 skill install SOURCE --mode source
 skill install SOURCE --mode source --apply
+skill package-configure --name NAME --contract CONTRACT.json --apply
 skill update --name NAME
 skill guardian policy --file guardian-policy.json --apply
 skill guardian scan --apply
@@ -106,7 +108,9 @@ Registry, verification, mutation, governance, stability, and V5 supply-chain con
 - Git state is pinned to full commits and updates must prove fast-forward ancestry;
 - scheduled Guardian work publishes reports but cannot enter an install or update transaction;
 - compatibility stays `UNKNOWN` unless a declared bounded probe supplies direct evidence;
-- no risk tier permits unattended production updates in V5.3;
+- no risk tier permits unattended production updates in V5.4;
+- PACKAGE apply supports only reviewed Linux `uv-tool-git` contracts and restores adapter, tool,
+  executable link, shared uv metadata, Registry, and reports from a verified snapshot on failure;
 - verification uses argument arrays, bounded output, timeouts, and credential redaction;
 - backups do not follow activity links and restores do not silently recreate host-specific links;
 - stable health never fetches, installs, updates, or writes;

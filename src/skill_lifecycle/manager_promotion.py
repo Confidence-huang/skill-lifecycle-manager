@@ -186,7 +186,7 @@ def preview_manager_promotion(plan_path: Path, host: HostLayout) -> dict[str, An
     candidate_source = _absolute_path(plan["candidateSource"], "candidateSource")
     carrier = _absolute_path(plan["carrierPath"], "carrierPath")
     activity = _absolute_entry(plan["activityEntry"], "activityEntry")
-    formal_cli = _absolute_path(plan["formalCLI"], "formalCLI")
+    formal_cli = _absolute_entry(plan["formalCLI"], "formalCLI")
     uv_path = _absolute_path(plan["uvPath"], "uvPath")
     receipt = _absolute_path(plan["uvReceipt"], "uvReceipt")
     recovery = _absolute_path(plan["recoveryRoot"], "recoveryRoot", must_exist=False)
@@ -217,6 +217,12 @@ def preview_manager_promotion(plan_path: Path, host: HostLayout) -> dict[str, An
         raise LifecycleBlocked("Manager activity entry does not resolve to formalSource.")
     if not os.access(uv_path, os.X_OK) or not os.access(formal_cli, os.X_OK):
         raise LifecycleBlocked("Promotion uvPath and formalCLI must be executable.")
+    tool_root = _absolute_path(plan["uvToolDir"], "uvToolDir", must_exist=False)
+    bin_root = _absolute_path(plan["uvToolBinDir"], "uvToolBinDir", must_exist=False)
+    if receipt.parent != tool_root / "skill-lifecycle-manager":
+        raise LifecycleBlocked("Promotion uvReceipt must belong to skill-lifecycle-manager below uvToolDir.")
+    if formal_cli.parent != bin_root:
+        raise LifecycleBlocked("Promotion formalCLI must be one direct child of uvToolBinDir.")
     if _receipt_source(receipt) != formal_source:
         raise LifecycleBlocked("uv receipt editable source does not match formalSource.")
     for name, attribute in STATE_PATHS.items():
@@ -299,6 +305,40 @@ def _tool_environment(plan: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _uv_install_manager(plan: dict[str, Any], source: Path, environment: dict[str, str]) -> None:
+    """Rebuild editable distribution metadata instead of reusing uv's prior local wheel cache."""
+    _run(
+        [
+            plan["uvPath"],
+            "tool",
+            "install",
+            "--offline",
+            "--force",
+            "--reinstall-package",
+            "skill-lifecycle-manager",
+            "--editable",
+            str(source),
+        ],
+        environment=environment,
+    )
+
+
+def _installed_distribution_version(plan: dict[str, Any]) -> str:
+    """Read the one installed dist-info version that `uv tool list` reports."""
+    tool = Path(plan["uvToolDir"]) / "skill-lifecycle-manager"
+    metadata_files = sorted(tool.glob("lib/python*/site-packages/skill_lifecycle_manager-*.dist-info/METADATA"))
+    if len(metadata_files) != 1:
+        raise LifecycleBlocked(f"Installed manager metadata is ambiguous: {metadata_files}")
+    versions = [
+        line.partition(":")[2].strip()
+        for line in metadata_files[0].read_text(encoding="utf-8").splitlines()
+        if line.startswith("Version:")
+    ]
+    if len(versions) != 1:
+        raise LifecycleBlocked("Installed manager dist-info lacks one Version field.")
+    return versions[0]
+
+
 def _copy_preimages(plan: dict[str, Any], host: HostLayout, preimages: Path) -> None:
     """Copy the receipt and five authorized state files before source publication."""
     preimages.mkdir(parents=True)
@@ -347,6 +387,8 @@ def _completed_retry(plan: dict[str, Any], host: HostLayout) -> dict[str, Any] |
         raise LifecycleBlocked("Completed promotion retry found activity drift.")
     if _receipt_source(Path(plan["uvReceipt"])) != formal_source:
         raise LifecycleBlocked("Completed promotion retry found uv receipt drift.")
+    if _installed_distribution_version(plan) != plan["newManagerVersion"]:
+        raise LifecycleBlocked("Completed promotion retry found stale uv distribution metadata.")
     environment = _tool_environment(plan)
     identity = _json_command([plan["formalCLI"], "--version"], environment=environment)
     if identity.get("sourceCommit") != plan["newCommit"] or identity.get("managerVersion") != plan["newManagerVersion"]:
@@ -402,10 +444,7 @@ def _rollback_manager_promotion(
 
         environment = _tool_environment(plan)
         if source_was_published:
-            _run(
-                [plan["uvPath"], "tool", "install", "--offline", "--force", "--editable", str(formal_source)],
-                environment=environment,
-            )
+            _uv_install_manager(plan, formal_source, environment)
         receipt_preimage = preimages / "uv-receipt.toml"
         atomic_bytes(Path(plan["uvReceipt"]), receipt_preimage.read_bytes())
         if sha256_file(Path(plan["uvReceipt"])) != sha256_file(receipt_preimage):
@@ -505,15 +544,14 @@ def execute_manager_promotion(
         atomic_json(transaction_path, _transaction_record(plan, "IN_PROGRESS", steps))
 
         environment = _tool_environment(plan)
-        _run(
-            [plan["uvPath"], "tool", "install", "--offline", "--force", "--editable", str(formal_source)],
-            environment=environment,
-        )
+        _uv_install_manager(plan, formal_source, environment)
         installed_identity = _json_command([plan["formalCLI"], "--version"], environment=environment)
         if installed_identity.get("sourceCommit") != plan["newCommit"] or installed_identity.get("managerVersion") != plan["newManagerVersion"]:
             raise LifecycleBlocked("Installed manager identity does not match the promotion plan.")
         if _receipt_source(Path(plan["uvReceipt"])) != formal_source:
             raise LifecycleBlocked("Published uv receipt does not resolve to the promoted formal source.")
+        if _installed_distribution_version(plan) != plan["newManagerVersion"]:
+            raise LifecycleBlocked("Published uv distribution metadata does not match newManagerVersion.")
         steps.append({"name": "publish-cli", "status": "PASS"})
         atomic_json(transaction_path, _transaction_record(plan, "IN_PROGRESS", steps))
         _inject_failure(failure_point, "after-cli-publication")

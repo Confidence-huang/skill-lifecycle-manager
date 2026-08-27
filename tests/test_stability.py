@@ -44,7 +44,7 @@ class StabilityTests(unittest.TestCase):
 
         manager_record = result["baseline"]["manager"]
         self.assertEqual(manager_record["repository"], expected_repository)
-        self.assertEqual(manager_record["version"], "5.3.0")
+        self.assertEqual(manager_record["version"], "5.4.0")
         self.assertRegex(manager_record["sourceTree"], r"^[0-9a-f]{40}$")
         self.assertRegex(manager_record["identitySHA256"], r"^[0-9A-F]{64}$")
 

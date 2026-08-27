@@ -101,6 +101,16 @@ class HostLayout:
         return self.v5_root / "transactions"
 
     @property
+    def package_transaction_root(self) -> Path:
+        """Return the durable PACKAGE transaction and restore-evidence root."""
+        return self.v5_root / "package-transactions"
+
+    @property
+    def package_lock_root(self) -> Path:
+        """Return the exclusive per-PACKAGE mutation-lock root."""
+        return self.v5_root / "package-locks"
+
+    @property
     def guardian_root(self) -> Path:
         """Return the isolated root for monitoring policy, reports, approvals, and schedule evidence."""
         return self.state_root / "guardian"

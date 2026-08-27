@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skill-lifecycle-manager.dev/schemas/skill-manifest-v6.schema.json",
+  "title": "AI Development Environment Skill Manifest v6",
+  "type": "object",
+  "required": ["name", "type", "source", "tracking", "update", "risk", "dependencies"],
+  "properties": {
+    "name": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "type": {"enum": ["PACKAGE", "SOURCE", "HYBRID"]},
+    "source": {"type": "object", "required": ["repository"], "properties": {"repository": {"type": "string"}, "channel": {"type": "string"}, "branch": {"type": "string"}, "tag": {"type": "string"}, "pinnedCommit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}, "additionalProperties": false},
+    "tracking": {"type": "object", "required": ["kind"], "properties": {"kind": {"enum": ["SEMVER", "GIT_COMMIT", "GIT_TAG", "LOCAL_HASH"]}, "current": {"type": ["string", "null"]}}, "additionalProperties": false},
+    "update": {"type": "object", "required": ["strategy"], "properties": {"strategy": {"enum": ["RELEASE", "BRANCH", "TAG", "MANUAL"]}, "requiresApproval": {"type": "boolean"}}, "additionalProperties": false},
+    "risk": {"enum": ["LOW", "MEDIUM", "HIGH"]},
+    "dependencies": {"type": "array", "items": {"type": "object", "required": ["name", "kind"], "properties": {"name": {"type": "string"}, "kind": {"enum": ["SKILL", "PLUGIN", "MCP", "TOOLCHAIN", "RUNTIME"]}, "constraint": {"type": "string"}}, "additionalProperties": false}}
+  },
+  "additionalProperties": false
+}

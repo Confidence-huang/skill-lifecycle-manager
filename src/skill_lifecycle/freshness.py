@@ -12,6 +12,7 @@ import json  # Read the canonical Registry without changing generated state.
 import re  # Extract exact stable semantic versions from tags and CLI output.
 import shutil  # Resolve an optional companion CLI through the reviewed process PATH.
 import subprocess  # Run Git and CLI probes through argument arrays without a shell.
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path  # Preserve configured local or remote repository strings as literal arguments.
 from typing import Any  # Describe Registry records and JSON feedback without hidden classes.
 
@@ -44,8 +45,8 @@ def version_parts(version: str) -> tuple[int, int, int]:
 
 
 # --- Resolve the newest exact stable tag ---
-def latest_tag(repository: str, tag_prefix: str) -> tuple[str | None, str | None]:
-    """Read remote tag refs without fetching objects or modifying any repository."""
+def resolve_release(repository: str, tag_prefix: str) -> tuple[str | None, str | None, str | None, str | None]:
+    """Resolve the newest stable tag to its exact peeled commit without fetching objects."""
     try:
         completed = subprocess.run(
             ["git", "ls-remote", "--tags", repository],
@@ -55,23 +56,41 @@ def latest_tag(repository: str, tag_prefix: str) -> tuple[str | None, str | None
             timeout=GIT_TIMEOUT_SECONDS,
         )  # The repository remains one literal argument even when it is a URL.
     except (OSError, subprocess.TimeoutExpired) as error:
-        return None, f"Git tag inspection failed: {error}"
+        return None, None, None, f"Git tag inspection failed: {error}"
     if completed.returncode:
         detail = completed.stderr.strip() or f"git exited {completed.returncode}"
-        return None, f"Git tag inspection failed: {detail}"
+        return None, None, None, f"Git tag inspection failed: {detail}"
 
     ref_pattern = re.compile(rf"^refs/tags/{re.escape(tag_prefix)}([0-9]+\.[0-9]+\.[0-9]+)$")
-    versions: list[str] = []
+    peeled_pattern = re.compile(rf"^refs/tags/{re.escape(tag_prefix)}([0-9]+\.[0-9]+\.[0-9]+)\^\{{\}}$")
+    direct: dict[str, str] = {}
+    peeled: dict[str, str] = {}
     for line in completed.stdout.splitlines():
         fields = line.split(maxsplit=1)  # Git returns `<object> <ref>` for each remote tag.
         if len(fields) != 2:
             continue  # An incomplete line is not release evidence.
-        match = ref_pattern.fullmatch(fields[1])
-        if match:
-            versions.append(match.group(1))  # Prerelease and unrelated tags never enter comparison.
-    if not versions:
-        return None, "No stable release tags matched the configured prefix."
-    return max(versions, key=version_parts), None
+        object_id, reference = fields
+        if not re.fullmatch(r"[0-9a-f]{40}", object_id):
+            continue  # A malformed object ID cannot become immutable update evidence.
+        peeled_match = peeled_pattern.fullmatch(reference)
+        if peeled_match:
+            peeled[peeled_match.group(1)] = object_id  # Annotated tags bind to the underlying commit.
+            continue
+        direct_match = ref_pattern.fullmatch(reference)
+        if direct_match:
+            direct[direct_match.group(1)] = object_id  # Lightweight tags already point at a commit.
+    if not direct:
+        return None, None, None, "No stable release tags matched the configured prefix."
+    version = max(direct, key=version_parts)
+    tag = f"{tag_prefix}{version}"
+    commit = peeled.get(version, direct[version])
+    return version, tag, commit, None
+
+
+def latest_tag(repository: str, tag_prefix: str) -> tuple[str | None, str | None]:
+    """Preserve the earlier helper while delegating identity resolution to the exact release contract."""
+    version, _, _, issue = resolve_release(repository, tag_prefix)
+    return version, issue
 
 
 # --- Inspect one optional companion CLI ---
@@ -106,6 +125,21 @@ def check_record(record: dict[str, Any]) -> dict[str, Any]:
     """Build one self-contained freshness result from Registry, Git tags, and CLI evidence."""
     contract = record.get("updates")
     if not contract:
+        remote = record.get("remote")
+        commit = record.get("commit")
+        branch = record.get("branch") or "main"
+        local_source = record.get("sourceRepository")
+        if not remote and local_source and Path(local_source).is_dir() and (Path(local_source) / ".git").exists():
+            try:
+                local_head = subprocess.run(["git", "-C", local_source, "rev-parse", "HEAD"], text=True, capture_output=True, check=False, timeout=5).stdout.strip()
+            except (OSError, subprocess.TimeoutExpired):
+                local_head = None
+            status = "CURRENT_LOCAL_ONLY" if local_head and local_head == commit else ("LOCAL_DRIFT" if local_head else "UNKNOWN")
+            return {"name": record.get("name"), "lifecycleMode": record.get("lifecycleMode"), "strategy": "local-repository", "repository": local_source, "branch": branch, "currentCommit": commit, "observedCommit": local_head, "updateStatus": status, "risk": "MEDIUM", "recommendation": "Configure an upstream remote before updating" if status != "CURRENT_LOCAL_ONLY" else "No upstream freshness claim", "issue": "No upstream remote configured", "mutations": 0}
+        if remote and isinstance(remote, str) and remote.startswith(("https://", "ssh://", "git@")):
+            latest_commit, issue = resolve_branch(remote, branch)
+            status = "UNKNOWN" if issue or not latest_commit else ("CURRENT" if latest_commit == commit else "UPDATE_AVAILABLE")
+            return {"name": record.get("name"), "lifecycleMode": record.get("lifecycleMode"), "strategy": "git-branch", "repository": remote, "branch": branch, "currentCommit": commit, "latestCommit": latest_commit, "updateStatus": status, "risk": "MEDIUM", "recommendation": "Review diff and approve manually" if status == "UPDATE_AVAILABLE" else "No action", "issue": issue, "mutations": 0}
         return {
             "name": record.get("name"),
             "lifecycleMode": record.get("lifecycleMode"),
@@ -117,7 +151,9 @@ def check_record(record: dict[str, Any]) -> dict[str, Any]:
     cli_status, installed, cli_issue = cli_version(contract.get("cli"))
     current = installed or baseline  # A missing CLI falls back to adapter compatibility, never an invented installation.
     current_source = "CLI" if installed else "ADAPTER_BASELINE"
-    latest, tag_issue = latest_tag(contract["repository"], contract["tagPrefix"])
+    latest, candidate_tag, candidate_commit, tag_issue = resolve_release(
+        contract["repository"], contract["tagPrefix"]
+    )
     issue = cli_issue or tag_issue
     if issue or latest is None or cli_status == "UNKNOWN":
         update_status = "UNKNOWN"
@@ -139,10 +175,26 @@ def check_record(record: dict[str, Any]) -> dict[str, Any]:
         "currentVersion": current,
         "currentVersionSource": current_source,
         "latestVersion": latest,
+        "candidateTag": candidate_tag,
+        "candidateCommit": candidate_commit,
         "updateStatus": update_status,
         "issue": issue,
         "mutations": 0,
     }  # One row carries enough context to explain every comparison decision locally.
+
+
+def resolve_branch(repository: str, branch: str) -> tuple[str | None, str | None]:
+    """Resolve one remote branch tip without fetching objects or changing a checkout."""
+    try:
+        completed = subprocess.run(["git", "ls-remote", repository, f"refs/heads/{branch}"], text=True, capture_output=True, check=False, timeout=GIT_TIMEOUT_SECONDS)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return None, f"Git branch inspection failed: {error}"
+    if completed.returncode:
+        return None, completed.stderr.strip() or f"git exited {completed.returncode}"
+    fields = completed.stdout.strip().split()
+    if not fields or not re.fullmatch(r"[0-9a-f]{40}", fields[0]):
+        return None, "Remote branch did not return one full commit."
+    return fields[0], None
 
 
 # --- Check one named Skill or every configured PACKAGE ---
@@ -155,10 +207,11 @@ def check_updates(layout: HostLayout, name: str | None) -> dict[str, Any]:
         if len(selected) != 1:  # Equal names with multiple physical entries cannot choose one update channel safely.
             raise LifecycleBlocked(f"Expected one Registry record named {name}, found {len(selected)}.")
     else:
-        selected = [record for record in records if record.get("updates")]  # Batch mode skips known unconfigured packages.
+        selected = [record for record in records if record.get("updates") or record.get("remote") or record.get("sourceRepository")]  # v6 checks declared SOURCE/HYBRID remotes and local evidence too.
 
-    updates = [check_record(record) for record in selected]
-    states = ("CURRENT", "UPDATE_AVAILABLE", "AHEAD", "UNKNOWN", "NOT_CONFIGURED")
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        updates = list(pool.map(check_record, selected))
+    states = ("CURRENT", "CURRENT_LOCAL_ONLY", "LOCAL_DRIFT", "UPDATE_AVAILABLE", "AHEAD", "UNKNOWN", "NOT_CONFIGURED")
     summary = {state: sum(update["updateStatus"] == state for update in updates) for state in states}
     status = "UNKNOWN" if summary["UNKNOWN"] else "PASS"
     return {

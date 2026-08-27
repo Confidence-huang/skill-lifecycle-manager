@@ -15,11 +15,13 @@ from pathlib import Path  # Preserve POSIX paths from the CLI boundary.
 from typing import Any  # Describe the structured result passed to the renderer.
 
 from skill_lifecycle.freshness import check_updates  # Compare configured PACKAGE releases without writes or fetch.
+from skill_lifecycle.doctor import doctor  # Aggregate bounded v6 environment evidence without writes.
 from skill_lifecycle.guardian import approve_guardian_update, publish_guardian_policy, scan_guardian, schedule_guardian  # Run policy, daily scan, approval, and scheduling commands.
 from skill_lifecycle.inventory import governance_result, registry_result, report_result, scan_skills, write_registry  # Read and publish inventory evidence.
 from skill_lifecycle.manager_identity import manager_identity  # Report exact package and source identity without writes.
 from skill_lifecycle.manager_promotion import execute_manager_promotion, read_promotion_plan  # Run one exact offline self-promotion plan.
 from skill_lifecycle.operations import backup_preview, create_backup, inspect_install, install_skill, restore_backup, update_skill  # Execute explicit lifecycle transactions.
+from skill_lifecycle.package_transaction import configure_package_transaction
 from skill_lifecycle.paths import HostLayout, LifecycleBlocked  # Apply one host layout and shared stop gate.
 from skill_lifecycle.platforms import UnsupportedPlatform, current_platform
 from skill_lifecycle.pilot import activate_pilot, approve_pilot, rollback_pilot, verify_pilot  # Run the reviewed Phase D decision-to-rollback chain.
@@ -62,11 +64,16 @@ def parser() -> argparse.ArgumentParser:
     install.add_argument("--skill-path", help="Skill path relative to a multi-Skill source")
     install.add_argument("--apply", action="store_true")
 
-    update = commands.add_parser("update", help="Preview or apply one validated fast-forward update")
+    update = commands.add_parser("update", help="Preview or apply one native Skill/PACKAGE transaction")
     update.add_argument("--name", required=True)
     update.add_argument("--approval", type=Path, help="Exact Guardian approval required by --apply")
     update.add_argument("--evaluated-at", help="Timezone-aware approval evaluation time required by --apply")
     update.add_argument("--apply", action="store_true")
+
+    package_configure = commands.add_parser("package-configure", help="Preview or adopt one reviewed PACKAGE driver contract")
+    package_configure.add_argument("--name", required=True)
+    package_configure.add_argument("--contract", type=Path, required=True)
+    package_configure.add_argument("--apply", action="store_true")
 
     updates = commands.add_parser("updates", help="Check configured PACKAGE release freshness without writes")
     updates_target = updates.add_mutually_exclusive_group(required=True)
@@ -177,6 +184,10 @@ def parser() -> argparse.ArgumentParser:
 
     health_parser = commands.add_parser("health", help="Compare frozen local evidence without writes or fetch")
     health_parser.add_argument("--project-root", type=Path)
+    doctor_parser = commands.add_parser("doctor", help="Read-only AI development environment health report")
+    doctor_parser.add_argument("--project-root", type=Path)
+    doctor_parser.add_argument("--codex-command", default="codex")
+    doctor_parser.add_argument("--json", action="store_true", help="Emit the canonical JSON report")
     return root
 
 
@@ -236,10 +247,14 @@ def execute(arguments: argparse.Namespace, host: HostLayout) -> dict[str, Any]:
         return install_skill(host, source, arguments.mode, arguments.skill_path) if arguments.apply else inspect_install(host, source, arguments.mode, arguments.skill_path)
     if arguments.command == "update":
         return update_skill(host, arguments.name, arguments.apply, arguments.approval, arguments.evaluated_at)
+    if arguments.command == "package-configure":
+        return configure_package_transaction(host, arguments.name, arguments.contract, arguments.apply)
     if arguments.command == "updates":
         return check_updates(host, arguments.name)
     if arguments.command == "plugins":
         return scan_plugins(arguments.codex_command, arguments.available)
+    if arguments.command == "doctor":
+        return doctor(host, arguments.project_root, arguments.codex_command)
     if arguments.command == "guardian":
         if arguments.guardian_command == "policy":
             return publish_guardian_policy(host, arguments.file, arguments.apply)

@@ -185,17 +185,14 @@ def install_skill(layout: HostLayout, source: str, mode: str = "auto", skill_pat
 
 
 def registry_record(layout: HostLayout, name: str) -> dict[str, Any]:
-    """Resolve one unambiguous managed source record from the canonical Registry."""
+    """Resolve one unambiguous lifecycle record from the canonical Registry."""
     if not layout.registry_path.is_file():
         raise LifecycleBlocked(f"Registry is missing: {layout.registry_path}")
     registry = json.loads(layout.registry_path.read_text(encoding="utf-8"))
     records = [record for record in registry.get("skills", []) if record.get("name") == name]
     if len(records) != 1:
         raise LifecycleBlocked(f"Expected one Registry record named {name}, found {len(records)}.")
-    record = records[0]
-    if record.get("lifecycleMode") not in {"SOURCE", "HYBRID"} or not record.get("sourceRepository"):
-        raise LifecycleBlocked(f"Skill is not source-managed: {name}")
-    return record
+    return records[0]
 
 
 def update_skill(
@@ -205,8 +202,16 @@ def update_skill(
     approval_path: Path | None = None,
     evaluated_at: str | None = None,
 ) -> dict[str, Any]:
-    """Preview remote identity or apply one validated fast-forward source update."""
+    """Route one Registry entity through its native Skill or PACKAGE transaction."""
     record = registry_record(layout, name)
+    if record.get("lifecycleMode") == "PACKAGE":
+        from skill_lifecycle.package_transaction import update_package
+
+        return update_package(layout, record, apply, approval_path, evaluated_at)
+    if record.get("lifecycleMode") not in {"SOURCE", "HYBRID"} or not record.get("sourceRepository"):
+        raise LifecycleBlocked(
+            f"Lifecycle update is supported, but {name} has no source or PACKAGE transaction contract."
+        )
     repository = Path(record["sourceRepository"]).resolve(strict=True)
     if run_git(repository, "status", "--porcelain=v1").stdout.strip():
         raise LifecycleBlocked(f"Source repository is dirty: {repository}")

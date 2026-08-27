@@ -33,6 +33,7 @@ def freshness_fixture(root: Path):
     host = layout(root / "host")
     package = create_skill(host.activity_root / "spec-kit", "spec-kit")
     upstream = create_release_repository(root)
+    baseline_commit = git("rev-parse", "HEAD", cwd=upstream)
     write_lifecycle_record(
         package,
         {
@@ -44,6 +45,7 @@ def freshness_fixture(root: Path):
                 "repository": str(upstream),
                 "tagPrefix": "v",
                 "baselineVersion": "0.13.0",
+                "baselineCommit": baseline_commit,
                 "cli": {"command": "specify", "arguments": ["version"]},
             },
         },
@@ -68,12 +70,34 @@ class FreshnessTests(unittest.TestCase):
         self.assertEqual(update["currentVersion"], "0.13.0")
         self.assertEqual(update["currentVersionSource"], "ADAPTER_BASELINE")
         self.assertEqual(update["latestVersion"], "0.16.0")
+        self.assertEqual(update["candidateTag"], "v0.16.0")
+        self.assertRegex(update["candidateCommit"], r"^[0-9a-f]{40}$")
         self.assertEqual(update["updateStatus"], "UPDATE_AVAILABLE")
         self.assertEqual(result["mutations"], 0)
         self.assertEqual(batch["summary"]["checked"], 1)
         self.assertEqual(batch["updates"][0]["updateStatus"], "UPDATE_AVAILABLE")
         self.assertEqual(batch["mutations"], 0)
         self.assertEqual(before, after)
+
+    def test_annotated_release_tag_resolves_to_peeled_commit(self) -> None:
+        """Bind PACKAGE candidates to the release commit rather than the mutable tag label alone."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            host = freshness_fixture(root)
+            upstream = root / "upstream"
+            (upstream / "README.md").write_text("annotated release\n", encoding="utf-8")
+            git("add", "--", "README.md", cwd=upstream)
+            git("commit", "-m", "annotated candidate", cwd=upstream)
+            candidate_commit = git("rev-parse", "HEAD", cwd=upstream)
+            git("tag", "-a", "v0.16.4", "-m", "release v0.16.4", cwd=upstream)
+
+            with patch("skill_lifecycle.freshness.shutil.which", return_value=None):
+                result = check_updates(host, "spec-kit")
+
+        update = result["updates"][0]
+        self.assertEqual(update["latestVersion"], "0.16.4")
+        self.assertEqual(update["candidateTag"], "v0.16.4")
+        self.assertEqual(update["candidateCommit"], candidate_commit)
 
     def test_installed_cli_version_overrides_adapter_baseline(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
