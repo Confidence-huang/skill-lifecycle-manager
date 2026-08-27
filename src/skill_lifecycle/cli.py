@@ -31,6 +31,14 @@ from skill_lifecycle.stability import health, stabilize  # Freeze and compare st
 from skill_lifecycle.verification import verify_target  # Collect bounded Static/Runtime/Behavior evidence.
 
 
+def configure_standard_streams() -> None:
+    """Emit one UTF-8 JSON contract even when the Windows console defaults to GBK."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)  # Test and embedded streams may not expose TextIOWrapper APIs.
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="strict")  # UTF-8 represents every path and governance symbol losslessly.
+
+
 def parser() -> argparse.ArgumentParser:
     """Describe every command and make each mutating boundary visible as --apply."""
     root = argparse.ArgumentParser(prog="skill", description="Python 3.12 Windows/Linux Skill lifecycle CLI")
@@ -343,6 +351,7 @@ def execute(arguments: argparse.Namespace, host: HostLayout) -> dict[str, Any]:
 
 def main(arguments: list[str] | None = None) -> int:
     """Execute one command and return a shell-friendly PASS/UNKNOWN or BLOCKED exit code."""
+    configure_standard_streams()  # Configure output before any platform, parser, or command feedback is rendered.
     try:
         current_platform()
     except UnsupportedPlatform as error:
