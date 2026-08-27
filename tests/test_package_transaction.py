@@ -126,10 +126,10 @@ def seed_old_tool(tool_root: Path, bin_root: Path, commit: str) -> tuple[Path, P
     return package, shim
 
 
+@unittest.skipUnless(sys.platform.startswith("linux"), "PACKAGE apply is Linux-native in V5.4.")
 class PackageTransactionPreviewTests(unittest.TestCase):
     """Require a complete, exact, zero-write preview before PACKAGE mutation."""
 
-    @unittest.skipUnless(sys.platform.startswith("linux"), "PACKAGE apply is Linux-native in V5.4.")
     def test_preview_lists_exact_identity_paths_commands_and_rollback(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -156,10 +156,10 @@ class PackageTransactionPreviewTests(unittest.TestCase):
             self.assertEqual(preview["mutations"], 0)
 
 
+@unittest.skipUnless(sys.platform.startswith("linux"), "PACKAGE apply is Linux-native in V5.4.")
 class PackageTransactionApplyTests(unittest.TestCase):
     """Exercise the complete observable PACKAGE update path through one real filesystem fixture."""
 
-    @unittest.skipUnless(sys.platform.startswith("linux"), "PACKAGE apply is Linux-native in V5.4.")
     def test_absent_uv_tool_installs_exact_candidate_and_commits(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -292,6 +292,7 @@ class PackageTransactionApplyTests(unittest.TestCase):
             self.assertFalse(host.package_transaction_root.exists())
 
 
+@unittest.skipUnless(sys.platform.startswith("linux"), "PACKAGE apply is Linux-native in V5.4.")
 class PackageConfigurationTests(unittest.TestCase):
     """Adopt a legacy adapter through a logged manager command instead of hand-editing live metadata."""
 
