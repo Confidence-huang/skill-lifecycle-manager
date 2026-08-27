@@ -227,6 +227,11 @@ def update_skill(
     preview = {"status": "PASS", "action": "UPDATE_PREVIEW", "name": name, "current": current, "candidate": candidate, "mutations": 0}
     if not apply or candidate == current:
         return preview
+    if name == "skill-lifecycle-manager":
+        raise LifecycleBlocked(
+            "Manager self-update is preview-only in the generic update command; "
+            "use the reviewed host-specific manager promotion workflow."
+        )
 
     from skill_lifecycle.guardian import require_guardian_approval  # Delay import so scanning can reuse Git without a module cycle.
 
