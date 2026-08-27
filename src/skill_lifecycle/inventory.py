@@ -17,11 +17,12 @@ from datetime import datetime, timezone  # Timestamp completed evidence in UTC.
 from pathlib import Path  # Preserve native host path identity.
 from typing import Any, Iterable  # Describe the structured Registry data flow.
 
+from skill_lifecycle import __version__  # Bind generated evidence to the installed manager release.
 from skill_lifecycle.paths import HostLayout, atomic_json, atomic_text, sha256_file  # Publish verified state safely.
 from skill_lifecycle.platforms import current_platform
 
 
-GENERATOR = "skill-lifecycle-manager/4.1.0"  # Identify Registries that include PACKAGE freshness contracts.
+GENERATOR = f"skill-lifecycle-manager/{__version__}"  # Report the release that produced each Registry and view.
 
 CAPABILITY_RULES = {
     "lifecycle-governance": ("skill", "lifecycle", "registry", "governance", "archive"),
