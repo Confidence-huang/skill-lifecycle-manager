@@ -1,11 +1,40 @@
 # Skill Lifecycle Manager
 
 [![CI](https://github.com/Confidence-huang/skill-lifecycle-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/Confidence-huang/skill-lifecycle-manager/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB.svg)](https://www.python.org/)
 
-An evidence-first lifecycle and governance CLI for Codex Skills and plugins. One Python core runs on
-Windows and Linux; mutating commands preview by default and require `--apply`.
+> An evidence-first CLI for governing the lifecycle of Codex Skills and plugins across Windows and Linux.
+
+The manager makes host-changing work inspectable: mutating commands preview by default, applied operations require `--apply`, and verification reports distinguish `PASS`, `BLOCKED`, `UNKNOWN`, `NOT_CONFIGURED`, and `NOT_RUN`.
+
+## Start here
+
+Install [uv](https://docs.astral.sh/uv/), then clone and verify the repository with its isolated Python 3.12 environment:
+
+```bash
+git clone https://github.com/Confidence-huang/skill-lifecycle-manager.git
+cd skill-lifecycle-manager
+uv sync --frozen
+uv run skill --version
+uv run python -m unittest discover -s tests -v
+```
+
+For a host installation, use the platform bootstrap and then verify the installed command:
+
+Linux:
+
+```bash
+./bootstrap.sh install
+skill --version
+```
+
+Windows PowerShell 7:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\bootstrap.ps1 install
+skill --version
+```
 
 ## What it manages
 
@@ -36,39 +65,7 @@ Windows and Linux; mutating commands preview by default and require `--apply`.
 | Reviewed Phase D pilot activation | ✅ | Not yet verified |
 | Offline manager self-promotion/rehearsal | ✅ | Not yet verified |
 
-The Linux-only rows are blocked explicitly on Windows. They need a separate Windows-native recovery
-rehearsal before they can be promoted to supported status.
-
-## Install
-
-Install [uv](https://docs.astral.sh/uv/), clone this repository, then run one of the following.
-
-Linux:
-
-```bash
-./bootstrap.sh install
-skill --version
-```
-
-Windows PowerShell:
-
-```powershell
-.\bootstrap.ps1 install
-skill --version
-```
-
-For development on either platform:
-
-```text
-uv sync --frozen
-uv run python -m unittest discover -s tests -v
-uv run skill --help
-uv build
-```
-
-Run repository Python only through `uv run python`; do not install a system `python` alias. The
-Guardian schedule records the installed tool environment's exact interpreter path so it does not
-depend on whichever Python happens to appear on `PATH` later.
+The Linux-only rows are blocked explicitly on Windows. They need a separate Windows-native recovery rehearsal before they can be promoted to supported status.
 
 ## Core workflow
 
@@ -95,12 +92,7 @@ skill stabilize --apply
 skill health
 ```
 
-Preview and applied operations return structured JSON. `PASS`, `BLOCKED`, `UNKNOWN`,
-`NOT_CONFIGURED`, and `NOT_RUN` are evidence states—not interchangeable success labels.
-
-Read [SKILL.md](SKILL.md) for the agent workflow and [plugin governance](references/plugin-governance.md)
-for the installation/source/auth/runtime evidence split. The other `references/` documents cover
-Registry, verification, mutation, governance, stability, and V5 supply-chain contracts.
+Preview and applied operations return structured JSON. Read [SKILL.md](./SKILL.md) for the agent workflow and [plugin governance](./references/plugin-governance.md) for the installation/source/auth/runtime evidence split. The other `references/` documents cover Registry, verification, mutation, governance, stability, and V5 supply-chain contracts.
 
 ## Safety model
 
@@ -109,8 +101,7 @@ Registry, verification, mutation, governance, stability, and V5 supply-chain con
 - scheduled Guardian work publishes reports but cannot enter an install or update transaction;
 - compatibility stays `UNKNOWN` unless a declared bounded probe supplies direct evidence;
 - no risk tier permits unattended production updates in V5.4;
-- PACKAGE apply supports only reviewed Linux `uv-tool-git` contracts and restores adapter, tool,
-  executable link, shared uv metadata, Registry, and reports from a verified snapshot on failure;
+- PACKAGE apply supports only reviewed Linux `uv-tool-git` contracts and restores adapter, tool, executable link, shared uv metadata, Registry, and reports from a verified snapshot on failure;
 - verification uses argument arrays, bounded output, timeouts, and credential redaction;
 - backups do not follow activity links and restores do not silently recreate host-specific links;
 - stable health never fetches, installs, updates, or writes;
@@ -118,7 +109,6 @@ Registry, verification, mutation, governance, stability, and V5 supply-chain con
 
 ## Contributing and security
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a change. Report vulnerabilities through the
-private process in [SECURITY.md](SECURITY.md), not a public issue.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a change. Report vulnerabilities through the private process in [SECURITY.md](./SECURITY.md), not a public issue.
 
-Licensed under the [Apache License 2.0](LICENSE).
+Licensed under the [Apache License 2.0](./LICENSE).
