@@ -235,7 +235,7 @@ Blocked: unknown version/source, unpeeled tag, unknown path, incomplete snapshot
 ```bash
 uv sync --frozen
 uv run python -m unittest discover -s tests -p 'test_*.py' -v
-uv run python /home/a/.codex/skills/.system/skill-creator/scripts/quick_validate.py .
+uv run python ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py .
 uv build
 ```
 
@@ -250,20 +250,20 @@ git commit -m "feat: add transactional package updates"
 
 **Files:**
 - Modify at runtime: formal manager source/tool through `manager-upgrade` only.
-- Modify at runtime: `/home/a/.agents/skills/spec-kit`, uv tool root/bin, Registry/report/baseline and transaction evidence through lifecycle commands only.
-- Modify: `/home/a/CodexProjects/Project_22-STM32/PROJECT_LOG.md`
+- Modify at runtime: `~/.agents/skills/spec-kit`, uv tool root/bin, Registry/report/baseline and transaction evidence through lifecycle commands only.
+- Modify: the selected project's `PROJECT_LOG.md`
 
 - [ ] **Step 1: Build an exact offline carrier and rehearse promotion rollback**
 
 ```bash
-git bundle create /home/a/.local/share/skill-lifecycle-manager/carriers/skill-lifecycle-manager-v5.4.0-formal.bundle codex/package-transaction-v5.4
-skill manager-rehearse --plan /home/a/.local/state/skill-lifecycle-manager/manager-promotion-v5.4.0-rehearsal.json --failure-point after-registry-regeneration --apply
+git bundle create ~/.local/share/skill-lifecycle-manager/carriers/skill-lifecycle-manager-v5.4.0-formal.bundle codex/package-transaction-v5.4
+skill manager-rehearse --plan ~/.local/state/skill-lifecycle-manager/manager-promotion-v5.4.0-rehearsal.json --failure-point after-registry-regeneration --apply
 ```
 
 - [ ] **Step 2: Apply the exact formal manager promotion**
 
 ```bash
-skill manager-upgrade --plan /home/a/.local/state/skill-lifecycle-manager/manager-promotion-v5.4.0-formal.json --apply
+skill manager-upgrade --plan ~/.local/state/skill-lifecycle-manager/manager-promotion-v5.4.0-formal.json --apply
 ```
 
 - [ ] **Step 3: Add the reviewed `uv-tool-git` contract to spec-kit and publish fresh Registry/Guardian evidence**

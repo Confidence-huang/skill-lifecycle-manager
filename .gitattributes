@@ -1,0 +1,10 @@
+# Keep executable shell entrypoints valid when Windows and WSL share a checkout.
+*.sh text eol=lf
+
+# Keep source, configuration, schema, and documentation diffs stable across hosts.
+*.py text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
