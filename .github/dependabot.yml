@@ -1,0 +1,25 @@
+# Keep the pinned GitHub Actions current without losing the exact reviewable SHA.
+#
+# Every `uses:` in .github/workflows carries a full commit SHA plus the release it came from, which
+# is what makes a third-party Action reviewable - and also what stops it from ever being updated by
+# itself. Dependabot rewrites both the SHA and the comment. Major versions arrive as their own pull
+# request so they get a deliberate review; minor and patch updates are grouped to limit noise.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore"
+    groups:
+      github-actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
