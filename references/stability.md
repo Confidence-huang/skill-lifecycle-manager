@@ -44,6 +44,16 @@ An existing baseline is immutable on every platform. A deliberate implementation
 `skill stabilize --apply --archive-existing`, which verifies and preserves the prior bytes under
 `baseline-history/` before publishing the new baseline.
 
+`baseline-history/` is the audit trail and is never pruned automatically: every archive is a few
+kilobytes of JSON, so unbounded growth is not a practical concern. If a host ever needs to prune it,
+copy the selected files to that platform's backup root first and keep the newest archive always -
+the current baseline alone does not show what the previous frozen state was.
+
+Because a baseline pins the observed HEAD of every tracked source, committing to a tracked source
+repository - including a rules repository that hosts Skills through symbolic links - makes `health`
+report `localSourceState` and `inventoryFingerprint` drift until the host deliberately rebaselines.
+That is the check working, not a defect.
+
 ## Working-set boundary
 
 Project tiers express task roles, not quality grades or observed frequency. A project may declare `CORE_WORKFLOW`, a domain-specific layer, and `ON_DEMAND` capabilities. The profile does not install, activate, route, freeze, archive, or delete any Skill.
