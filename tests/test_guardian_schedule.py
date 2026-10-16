@@ -55,28 +55,43 @@ class GuardianScheduleTests(unittest.TestCase):
                 schedule_guardian(host, "03:15", True, home=root / "home")
 
     def test_windows_preview_uses_task_scheduler_and_scan_only(self) -> None:
-        root = Path("C:/fixture")
-        host = platform_layout(root, "windows")
-        result = schedule_guardian(host, "04:20", False, home=Path("C:/Users/example"))
-        self.assertEqual(result["platform"], "windows")
-        self.assertIn("guardian", result["command"])
-        self.assertIn("scan", result["command"])
-        self.assertNotIn("update", result["command"])
-        self.assertEqual(result["mutations"], 0)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            host = platform_layout(root, "windows")
+            result = schedule_guardian(host, "04:20", False, home=root / "home")
+            launcher = Path(result["launcherPath"])
 
-    def test_windows_apply_refuses_existing_task_and_creates_only_when_absent(self) -> None:
-        root = Path("C:/fixture")
-        host = platform_layout(root, "windows")
-        absent_then_created = [CompletedProcess([], 1, "", "not found"), CompletedProcess([], 0, "", "")]
-        with patch("skill_lifecycle.platforms.subprocess.run", side_effect=absent_then_created) as run:
-            result = schedule_guardian(host, "04:20", True, home=Path("C:/Users/example"))
-        self.assertEqual(result["mutations"], 1)
-        self.assertEqual(run.call_args_list[1].args[0][0], "schtasks.exe")
-        self.assertNotIn("/F", run.call_args_list[1].args[0])
+            self.assertEqual(result["platform"], "windows")
+            self.assertIn("guardian", result["command"])
+            self.assertIn("scan", result["command"])
+            self.assertNotIn("update", result["command"])
+            self.assertEqual(result["mutations"], 0)
+            self.assertFalse(launcher.exists())  # Preview writes nothing.
 
-        with patch("skill_lifecycle.platforms.subprocess.run", return_value=CompletedProcess([], 0, "exists", "")):
-            with self.assertRaisesRegex(LifecycleBlocked, "already exists"):
-                schedule_guardian(host, "04:20", True, home=Path("C:/Users/example"))
+    def test_windows_apply_registers_a_short_launcher_and_creates_the_task_once(self) -> None:
+        """`schtasks /TR` is bounded to 261 characters, so the exact command lives in a launcher."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            host = platform_layout(root, "windows")
+            absent_then_created = [CompletedProcess([], 1, "", "not found"), CompletedProcess([], 0, "", "")]
+            with patch("skill_lifecycle.platforms.subprocess.run", side_effect=absent_then_created) as run:
+                result = schedule_guardian(host, "04:20", True, home=root / "home")
+            launcher = Path(result["launcherPath"])
+            created = run.call_args_list[1].args[0]
+
+            self.assertEqual(result["mutations"], 2)
+            self.assertEqual(created[0], "schtasks.exe")
+            self.assertNotIn("/F", created)
+            self.assertEqual(created[created.index("/TR") + 1], str(launcher))
+            self.assertLessEqual(len(str(launcher)), 261)
+            self.assertTrue(launcher.is_file())
+            body = launcher.read_bytes()
+            self.assertIn(b"\r\n", body)  # cmd.exe expects CRLF batch files.
+            self.assertIn(result["taskCommand"].encode(), body)
+
+            with patch("skill_lifecycle.platforms.subprocess.run", return_value=CompletedProcess([], 0, "exists", "")):
+                with self.assertRaisesRegex(LifecycleBlocked, "already exists"):
+                    schedule_guardian(host, "04:20", True, home=root / "home")
 
     def test_schedule_rejects_line_break_in_a_root_before_platform_mutation(self) -> None:
         root = Path("/tmp/unsafe\nroot")

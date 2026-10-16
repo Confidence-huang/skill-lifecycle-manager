@@ -116,6 +116,7 @@ class HostPlatform:
         apply: bool,
         *,
         home: Path | None = None,
+        launcher_root: Path | None = None,
     ) -> dict[str, object]:
         """Preview or install one scan-only daily schedule through the host-native scheduler."""
         if any("\n" in value or "\r" in value for value in command):
@@ -124,7 +125,7 @@ class HostPlatform:
         if self.name == "linux":
             return self._linux_guardian_schedule(command, schedule_time, apply, user_home)
         if self.name == "windows":
-            return self._windows_guardian_schedule(command, schedule_time, apply)
+            return self._windows_guardian_schedule(command, schedule_time, apply, launcher_root or user_home)
         raise UnsupportedPlatform(f"Unsupported host platform: {self.name}")
 
     def _linux_guardian_schedule(
@@ -200,31 +201,44 @@ class HostPlatform:
         command: list[str],
         schedule_time: str,
         apply: bool,
+        launcher_root: Path,
     ) -> dict[str, object]:
-        """Install one new Task Scheduler entry without overwriting an existing user task."""
+        """Install one new Task Scheduler entry without overwriting an existing user task.
+
+        `schtasks.exe /TR` rejects any command line longer than 261 characters, and the exact
+        interpreter plus four lifecycle roots exceed that on a normal host. The reviewed command is
+        therefore written to a launcher beside the manager state and `/TR` names only that file.
+        """
         task_name = "Skill Lifecycle Guardian"
+        launcher = Path(launcher_root) / "guardian-scan.cmd"
         task_command = subprocess.list2cmdline(command)  # Windows quoting stays data passed to schtasks.exe.
         result: dict[str, object] = {
             "platform": "windows",
             "taskName": task_name,
             "taskCommand": task_command,
+            "launcherPath": str(launcher),
             "command": command,
             "mutations": 0,
         }
         if not apply:
             return result
+        if len(str(launcher)) > 261:  # Fail closed instead of writing a task Windows will reject.
+            raise OSError(f"Guardian launcher path exceeds the schtasks /TR limit: {launcher}")
         existing = subprocess.run(["schtasks.exe", "/Query", "/TN", task_name], text=True, capture_output=True, check=False)
         if existing.returncode == 0:
             raise OSError("Guardian schedule already exists; refusing to overwrite it.")
+        launcher.parent.mkdir(parents=True, exist_ok=True)
+        launcher.write_bytes(("@echo off\r\nchcp 65001 >nul\r\n" + task_command + "\r\n").encode("utf-8"))  # cmd.exe reads batch files as ANSI without a code page.
         created = subprocess.run(
-            ["schtasks.exe", "/Create", "/SC", "DAILY", "/ST", schedule_time, "/TN", task_name, "/TR", task_command],
+            ["schtasks.exe", "/Create", "/SC", "DAILY", "/ST", schedule_time, "/TN", task_name, "/TR", str(launcher)],
             text=True,
             capture_output=True,
             check=False,
         )
         if created.returncode:
+            launcher.unlink(missing_ok=True)  # Remove only the launcher this failed installation created.
             raise OSError(created.stderr.strip() or created.stdout.strip() or "Windows scheduled task creation failed")
-        return {**result, "mutations": 1}
+        return {**result, "mutations": 2}
 
 
 def platform_for(platform_name: str) -> HostPlatform:
