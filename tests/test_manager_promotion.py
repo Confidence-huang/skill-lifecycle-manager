@@ -235,6 +235,15 @@ class ManagerPromotionTests(unittest.TestCase):
 
         self.assertEqual(tree_snapshot(self.root), before)
 
+    def test_carrier_origin_blocks_the_preview(self) -> None:
+        git("remote", "set-url", "origin", str(self.carrier), cwd=self.formal_source)
+        before = tree_snapshot(self.root)
+
+        with self.assertRaises(LifecycleBlocked):
+            preview_manager_promotion(self.plan_path, self.host)
+
+        self.assertEqual(tree_snapshot(self.root), before)
+
 
 @unittest.skipUnless(sys.platform.startswith("linux"), "Manager promotion recovery remains Linux-only.")
 class RealManagerPromotionTests(unittest.TestCase):
@@ -410,6 +419,16 @@ class RealManagerPromotionTests(unittest.TestCase):
         baseline = json.loads(self.host.baseline_path.read_text(encoding="utf-8"))
         self.assertEqual(baseline["manager"]["commit"], self.new_commit)
         self.assertTrue(Path(result["archivedBaselinePath"]).is_file())
+
+    def test_complete_upgrade_retains_the_configured_update_remote(self) -> None:
+        update_remote = git("remote", "get-url", "origin", cwd=self.formal_source)
+        self.assertNotEqual(Path(update_remote).resolve(), self.carrier.resolve())
+
+        result = execute_manager_promotion(self.plan_path, self.host, apply=True)
+
+        self.assertEqual(result["action"], "MANAGER_PROMOTED")
+        self.assertEqual(git("remote", "get-url", "origin", cwd=self.formal_source), update_remote)
+        self.assertEqual(git("rev-parse", "HEAD", cwd=self.formal_source), self.new_commit)
 
     def test_completed_upgrade_retry_is_zero_write(self) -> None:
         first = execute_manager_promotion(self.plan_path, self.host, apply=True)
