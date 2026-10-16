@@ -510,7 +510,7 @@ def schedule_guardian(layout: HostLayout, schedule_time: str, apply: bool, *, ho
         "--apply",
     ]  # Exact roots make a scheduled report refer to the same Registry selected during installation.
     try:
-        schedule = layout.platform.guardian_schedule(command, schedule_time, apply, home=home)
+        schedule = layout.platform.guardian_schedule(command, schedule_time, apply, home=home, launcher_root=layout.state_root)
     except OSError as error:
         raise LifecycleBlocked(str(error)) from error
     return {

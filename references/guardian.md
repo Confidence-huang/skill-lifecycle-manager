@@ -94,6 +94,12 @@ Linux installs a systemd user service/timer. Windows installs one Task Scheduler
 the exact activity/data/state/cache roots and run only `guardian scan --apply`. Installation refuses
 an existing schedule instead of overwriting it. Time uses the host's local 24-hour `HH:MM` value.
 
+On Windows the reviewed command is written to `guardian-scan.cmd` beside the manager state root and
+the task names only that launcher, because `schtasks.exe /TR` rejects command lines longer than 261
+characters - the exact interpreter plus four roots exceed that on a normal host. The launcher is
+removed again if task creation fails, and a launcher path that would itself exceed the bound stops
+the installation.
+
 ## Human approval and update
 
 After reviewing one immutable report row, publish a bounded approval:
