@@ -145,7 +145,10 @@ non-authoritative output. Read [references/supply-chain-v5.md](references/supply
 extending these contracts.
 
 Linux additionally exposes reviewed Phase D pilot and exact offline manager-promotion commands.
-These operations require separately approved plans and remain outside Windows support.
+These operations require separately approved plans and remain outside Windows support. Read
+[references/manager-promotion.md](references/manager-promotion.md) before authoring a promotion plan:
+it lists the exact plan keys, the update-channel invariants publication must preserve, and the
+bootstrap ordering that makes a promotion run the outgoing code.
 
 ## Completion checks
 
