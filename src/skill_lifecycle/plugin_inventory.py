@@ -22,7 +22,9 @@ from skill_lifecycle.paths import LifecycleBlocked  # Reuse the manager's fail-c
 
 
 GENERATOR = f"skill-lifecycle-manager/{__version__}"  # Bind plugin evidence to the running manager release.
-COMMAND_TIMEOUT_SECONDS = 30  # Inventory commands must not become an unbounded Desktop health probe.
+# A cold `codex plugin list --json` measured 53.6s on the development host (2026-10-16) while warm
+# calls return in about 1.4s, so the bound must tolerate a cold Codex start and still stay finite.
+COMMAND_TIMEOUT_SECONDS = 90
 DIAGNOSTIC_LIMIT = 400  # Preserve useful failures without returning arbitrary subprocess output.
 
 

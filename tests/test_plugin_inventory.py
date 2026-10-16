@@ -11,7 +11,7 @@ from unittest.mock import call, patch  # Replace only the true external Codex CL
 
 from skill_lifecycle.cli import execute, parser  # Prove public parsing and dispatch.
 from skill_lifecycle.paths import LifecycleBlocked  # Preserve the manager's shared stop gate.
-from skill_lifecycle.plugin_inventory import scan_plugins  # Exercise the deep module interface.
+from skill_lifecycle.plugin_inventory import COMMAND_TIMEOUT_SECONDS, scan_plugins  # Exercise the deep module interface.
 from support import layout  # Keep dispatch tests on one isolated host layout.
 
 
@@ -96,7 +96,7 @@ class PluginInventoryTests(unittest.TestCase):
         self.assertEqual(plugin["runtimeStatus"], "NOT_RUN")
         self.assertEqual(plugin["authenticationStatus"], "UNKNOWN")
         self.assertEqual(result["mutations"], 0)
-        options = {"text": True, "capture_output": True, "check": False, "timeout": 30, "shell": False}
+        options = {"text": True, "capture_output": True, "check": False, "timeout": COMMAND_TIMEOUT_SECONDS, "shell": False}
         self.assertEqual(
             run.call_args_list,
             [
@@ -143,6 +143,19 @@ class PluginInventoryTests(unittest.TestCase):
                 scan_plugins()
         self.assertIn("plugin command failed token=[REDACTED]", str(raised.exception))
         self.assertNotIn("topsecret", str(raised.exception))
+
+    def test_probe_bound_tolerates_a_cold_codex_start(self) -> None:
+        # A cold `codex plugin list --json` measured 53.6s on the development host while warm calls
+        # return in about 1.4s, so shrinking this bound back to 30s would block every first probe.
+        self.assertGreaterEqual(COMMAND_TIMEOUT_SECONDS, 60)
+
+    def test_codex_timeout_blocks_with_the_bound_in_the_message(self) -> None:
+        expired = subprocess.TimeoutExpired(["codex", "plugin", "list", "--json"], COMMAND_TIMEOUT_SECONDS)
+        with patch("skill_lifecycle.plugin_inventory.shutil.which", return_value="codex"), patch(
+            "skill_lifecycle.plugin_inventory.subprocess.run", side_effect=expired
+        ):
+            with self.assertRaisesRegex(LifecycleBlocked, f"timed out after {COMMAND_TIMEOUT_SECONDS} seconds"):
+                scan_plugins()
 
     def test_malformed_json_blocks_instead_of_inventing_inventory(self) -> None:
         responses = [completed([], "codex-cli 0.146.0\n"), completed([], "not-json")]
