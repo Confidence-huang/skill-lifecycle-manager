@@ -10,7 +10,7 @@ from unittest.mock import patch  # Control CLI discovery without changing the pr
 from skill_lifecycle.cli import parser  # Prove the public trigger accepts one name or all configured packages.
 from skill_lifecycle.freshness import check_updates  # Exercise the PACKAGE release evidence command.
 from skill_lifecycle.inventory import write_registry  # Publish one isolated canonical Registry fixture.
-from support import create_skill, git, layout, write_lifecycle_record  # Build deterministic local package and Git evidence.
+from support import create_git_skill, create_skill, git, layout, write_lifecycle_record  # Build deterministic local package and Git evidence.
 
 
 # --- Create a stable-tag upstream without network access ---
@@ -126,6 +126,25 @@ class FreshnessTests(unittest.TestCase):
             result = check_updates(host, "plain")
         self.assertEqual(result["updates"][0]["updateStatus"], "NOT_CONFIGURED")
         self.assertEqual(result["mutations"], 0)
+
+    def test_local_only_source_channel_is_not_reported_as_current(self) -> None:
+        """A carrier bundle remote must never be read as a live upstream channel."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            host = layout(root / "host")
+            source = create_git_skill(host.activity_root / "hop", "hop")
+            carrier = root / "hop.git.bundle"
+            git("bundle", "create", str(carrier), "main", cwd=source)
+            git("remote", "add", "origin", str(carrier), cwd=source)
+            write_registry(host)
+
+            result = check_updates(host, "hop")
+
+        update = result["updates"][0]
+        self.assertEqual(update["updateStatus"], "CURRENT_LOCAL_ONLY")
+        self.assertEqual(update["strategy"], "local-repository")
+        self.assertIn("not a live update channel", update["issue"])
+        self.assertEqual(result["summary"]["CURRENT_LOCAL_ONLY"], 1)
 
     def test_cli_requires_name_or_all(self) -> None:
         parsed_name = parser().parse_args(["updates", "--name", "spec-kit"])

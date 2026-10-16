@@ -12,7 +12,7 @@ from unittest.mock import patch  # Isolate PACKAGE CLI discovery from the develo
 from jsonschema import Draft202012Validator, FormatChecker  # Prove published Guardian evidence matches its public contract.
 
 from skill_lifecycle.cli import parser  # Prove the nested public command surface stays reachable.
-from skill_lifecycle.guardian import approve_guardian_update, publish_guardian_policy, scan_guardian
+from skill_lifecycle.guardian import approve_guardian_update, publish_guardian_policy, scan_guardian, scan_record
 from skill_lifecycle.inventory import write_registry  # Build the canonical observed-state fixture.
 from skill_lifecycle.operations import update_skill  # Prove approval gates the existing transaction.
 from skill_lifecycle.paths import LifecycleBlocked  # Assert literal safety stops.
@@ -138,6 +138,36 @@ class GuardianScanTests(unittest.TestCase):
         self.assertEqual(applied["mutations"], 4)
         self.assertEqual(git_before, git_after)
         self.assertEqual(report_errors, [])
+
+    def test_local_and_carrier_channels_are_never_reported_as_current(self) -> None:
+        """A local path or carrier bundle is not a live channel, even though `ls-remote` can read it."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = create_git_skill(root / "hop", "hop")
+            commit = git("rev-parse", "HEAD", cwd=source)
+            carrier = root / "hop.git.bundle"
+            git("bundle", "create", str(carrier), "main", cwd=source)
+
+            def record(remote: str | None, recorded_commit: str) -> dict:
+                return {
+                    "name": "hop",
+                    "lifecycleMode": "SOURCE",
+                    "sourceRepository": str(source),
+                    "remote": remote,
+                    "branch": "main",
+                    "commit": recorded_commit,
+                    "sourceDirty": False,
+                }
+
+            without_remote = scan_record(record(None, commit), None)
+            with_carrier = scan_record(record(str(carrier), commit), None)
+            drifted = scan_record(record(None, "0" * 40), None)
+
+        self.assertEqual(without_remote["updateStatus"], "CURRENT_LOCAL_ONLY")
+        self.assertIn("No upstream remote configured", without_remote["issues"])
+        self.assertEqual(with_carrier["updateStatus"], "CURRENT_LOCAL_ONLY")
+        self.assertIn("not a live update channel", with_carrier["issues"][0])
+        self.assertEqual(drifted["updateStatus"], "LOCAL_DRIFT")
 
 
 class GuardianApprovalTests(unittest.TestCase):

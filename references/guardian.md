@@ -72,6 +72,14 @@ four files beneath the Guardian state root: immutable JSON/Markdown history plus
 `latest.json` and `latest.md` views. Registry, sources, activity links, baseline, and project files
 remain unchanged.
 
+Only a channel that can advance is compared. A network URL and a local repository directory qualify;
+a `remote` that resolves to a local file - typically a migration or promotion carrier bundle - does
+not, because `ls-remote` would read a frozen snapshot and keep reporting the recorded commit as
+current forever. Those rows report `CURRENT_LOCAL_ONLY`, or `LOCAL_DRIFT` when the local checkout
+moved past the recorded commit, with the reason in `issues`. The generic update preview (`skill
+updates`) classifies the same record the same way, so the two commands cannot disagree about whether
+a Skill has a live upstream.
+
 `UPDATE_AVAILABLE` means the remote identity differs from current observed state. It does not prove
 fast-forward ancestry or compatibility; those facts require later candidate validation.
 
