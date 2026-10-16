@@ -8,3 +8,12 @@
 *.toml text eol=lf
 *.yaml text eol=lf
 *.yml text eol=lf
+
+# Cover the remaining tracked files that have no mapped extension. Without these, a Windows
+# checkout reports a permanently dirty tree for line-endings alone.
+.gitattributes text eol=lf
+.gitignore text eol=lf
+.python-version text eol=lf
+LICENSE text eol=lf
+*.ps1 text eol=lf
+uv.lock text eol=lf
