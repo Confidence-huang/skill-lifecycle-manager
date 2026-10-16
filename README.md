@@ -92,7 +92,7 @@ skill stabilize --apply
 skill health
 ```
 
-Preview and applied operations return structured JSON. Read [SKILL.md](./SKILL.md) for the agent workflow and [plugin governance](./references/plugin-governance.md) for the installation/source/auth/runtime evidence split. The other `references/` documents cover Registry, verification, mutation, governance, stability, and V5 supply-chain contracts.
+Preview and applied operations return structured JSON. Read [SKILL.md](./SKILL.md) for the agent workflow and [plugin governance](./references/plugin-governance.md) for the installation/source/auth/runtime evidence split. The other `references/` documents cover Registry, verification, mutation, governance, stability, V5 supply-chain contracts, and [manager self-promotion](./references/manager-promotion.md) - the one lifecycle the generic update command deliberately refuses to run.
 
 ## Safety model
 
