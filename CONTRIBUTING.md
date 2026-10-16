@@ -22,3 +22,30 @@ Thanks for improving Skill Lifecycle Manager.
    the system Python. Installed schedules use the tool environment's exact interpreter path.
 
 By submitting a contribution, you agree that it is licensed under Apache-2.0.
+
+## Merge gates on `main`
+
+`main` requires three status checks before merging, each bound to the app that must report it:
+
+| Required check | Reported by |
+|---|---|
+| `Python 3.12 / ubuntu-latest` | `github-actions` |
+| `Python 3.12 / windows-latest` | `github-actions` |
+| `CodeQL` | `github-advanced-security` |
+
+`CodeQL` is the code-scanning gate: the repository setting `Check runs failure threshold` fails that
+check on a high or higher security alert, so a finding cannot reach `main` unnoticed.
+
+The two `Analyze (python)` and `Analyze (actions)` jobs are deliberately **not** required even though
+they carry the actual analysis. GitHub skips CodeQL default setup on Dependabot pull requests, so
+those job names never report there and a required context that never reports would block the pull
+request indefinitely. The `CodeQL` check does report on those pull requests - with a `neutral`
+conclusion - and a required check is satisfied by a `successful`, `skipped`, or `neutral` status.
+
+Read or change the set with the branch protection API:
+
+```bash
+gh api repos/Confidence-huang/skill-lifecycle-manager/branches/main/protection \
+  --jq '.required_status_checks.checks'
+```
+
