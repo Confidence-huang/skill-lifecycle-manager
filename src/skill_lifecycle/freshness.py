@@ -22,6 +22,47 @@ from skill_lifecycle.paths import HostLayout, LifecycleBlocked  # Reuse canonica
 STABLE_VERSION = re.compile(r"(?<![0-9])([0-9]+)\.([0-9]+)\.([0-9]+)(?![0-9A-Za-z.-])")  # Reject prerelease suffixes and partial digits.
 GIT_TIMEOUT_SECONDS = 20  # Remote inspection stays bounded even when an endpoint is unavailable.
 CLI_TIMEOUT_SECONDS = 10  # Version commands should finish quickly and never become a workflow runner.
+# --- Classify the declared update channel of one SOURCE/HYBRID record ---
+def is_live_remote(remote: Any) -> bool:
+    """Return whether a declared remote can advance on its own.
+
+    A network URL and a local repository directory can both move as the upstream advances. A local
+    file - typically a promotion or migration carrier bundle - cannot: `git ls-remote` would read a
+    frozen snapshot and keep reporting the recorded commit as current forever.
+    """
+    if not isinstance(remote, str) or not remote:
+        return False
+    path = Path(remote).expanduser()
+    return not (path.is_absolute() and path.resolve().is_file())
+
+
+# --- Read the local HEAD of one declared source repository ---
+def local_repository_head(local_source: Any) -> str | None:
+    """Return the local HEAD of a declared source directory, or None when it is not a Git checkout."""
+    if not isinstance(local_source, str) or not local_source:
+        return None
+    path = Path(local_source)
+    if not path.is_dir() or not (path / ".git").exists():  # Ordinary Skill directories are not local Git sources.
+        return None
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "HEAD"],
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=CLI_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return completed.stdout.strip() or None
+
+
+# --- Describe why one source has no live update channel ---
+def channel_issue(remote: Any) -> str:
+    """Explain one non-live update channel without claiming a live upstream exists."""
+    if isinstance(remote, str) and remote:
+        return f"Configured remote is a frozen local file, not a live update channel: {remote}"
+    return "No upstream remote configured"
 
 
 # --- Read one canonical Registry snapshot ---
@@ -129,17 +170,14 @@ def check_record(record: dict[str, Any]) -> dict[str, Any]:
         commit = record.get("commit")
         branch = record.get("branch") or "main"
         local_source = record.get("sourceRepository")
-        if not remote and local_source and Path(local_source).is_dir() and (Path(local_source) / ".git").exists():
-            try:
-                local_head = subprocess.run(["git", "-C", local_source, "rev-parse", "HEAD"], text=True, capture_output=True, check=False, timeout=5).stdout.strip()
-            except (OSError, subprocess.TimeoutExpired):
-                local_head = None
-            status = "CURRENT_LOCAL_ONLY" if local_head and local_head == commit else ("LOCAL_DRIFT" if local_head else "UNKNOWN")
-            return {"name": record.get("name"), "lifecycleMode": record.get("lifecycleMode"), "strategy": "local-repository", "repository": local_source, "branch": branch, "currentCommit": commit, "observedCommit": local_head, "updateStatus": status, "risk": "MEDIUM", "recommendation": "Configure an upstream remote before updating" if status != "CURRENT_LOCAL_ONLY" else "No upstream freshness claim", "issue": "No upstream remote configured", "mutations": 0}
-        if remote and isinstance(remote, str) and remote.startswith(("https://", "ssh://", "git@")):
+        if is_live_remote(remote):
             latest_commit, issue = resolve_branch(remote, branch)
             status = "UNKNOWN" if issue or not latest_commit else ("CURRENT" if latest_commit == commit else "UPDATE_AVAILABLE")
             return {"name": record.get("name"), "lifecycleMode": record.get("lifecycleMode"), "strategy": "git-branch", "repository": remote, "branch": branch, "currentCommit": commit, "latestCommit": latest_commit, "updateStatus": status, "risk": "MEDIUM", "recommendation": "Review diff and approve manually" if status == "UPDATE_AVAILABLE" else "No action", "issue": issue, "mutations": 0}
+        local_head = local_repository_head(local_source)
+        if local_head:
+            status = "CURRENT_LOCAL_ONLY" if local_head == commit else "LOCAL_DRIFT"
+            return {"name": record.get("name"), "lifecycleMode": record.get("lifecycleMode"), "strategy": "local-repository", "repository": local_source, "branch": branch, "currentCommit": commit, "observedCommit": local_head, "updateStatus": status, "risk": "MEDIUM", "recommendation": "Configure an upstream remote before updating" if status != "CURRENT_LOCAL_ONLY" else "No upstream freshness claim", "issue": channel_issue(remote), "mutations": 0}
         return {
             "name": record.get("name"),
             "lifecycleMode": record.get("lifecycleMode"),

@@ -23,7 +23,7 @@ from pathlib import Path  # Keep every evidence location exact and host-native.
 from typing import Any  # Preserve visible JSON document shapes at the module interface.
 
 from skill_lifecycle.contracts import parse_timestamp  # Reuse the timezone-aware approval gate.
-from skill_lifecycle.freshness import STABLE_VERSION, check_record  # Reuse PACKAGE stable-release evidence.
+from skill_lifecycle.freshness import STABLE_VERSION, channel_issue, check_record, is_live_remote, local_repository_head  # Reuse the one update-channel vocabulary.
 from skill_lifecycle.operations import run_git  # Reuse the no-shell Git command seam.
 from skill_lifecycle.paths import HostLayout, LifecycleBlocked, atomic_json, atomic_text, sha256_file  # Publish only approved evidence.
 
@@ -163,16 +163,30 @@ def run_probe(probe: dict[str, Any], *, compatibility: bool) -> dict[str, Any]:
 
 # --- Inspect one SOURCE or HYBRID update channel without fetching ---
 def inspect_source_update(record: dict[str, Any]) -> tuple[str | None, str | None, str, str | None]:
-    """Return current/candidate/status/issue through `ls-remote`, leaving Git object state unchanged."""
+    """Return current/candidate/status/issue through `ls-remote`, leaving Git object state unchanged.
+
+    Only a remote that can advance is a live update channel. A local file - a carrier bundle - would
+    be read by `ls-remote` as a frozen snapshot, so those records are reported as local-only instead
+    of current, which keeps this report consistent with the generic update preview.
+    """
     repository_text = record.get("sourceRepository")
     remote = record.get("remote")
     branch = record.get("branch")
     current = record.get("commit")
-    if not repository_text or not remote or not branch or not current:
+    if not repository_text or not current:
         return current, None, "NOT_CONFIGURED", "Source update channel lacks repository, origin, branch, or commit evidence."
     repository = Path(repository_text)
     if record.get("sourceDirty"):
         return current, None, "UNKNOWN", f"Source repository is dirty: {repository}"
+    if not is_live_remote(remote):
+        local_head = local_repository_head(repository_text)
+        if not local_head:
+            return current, None, "NOT_CONFIGURED", "Source update channel lacks repository, origin, branch, or commit evidence."
+        if local_head != current:
+            return current, local_head, "LOCAL_DRIFT", f"Local checkout is at {local_head}, not the recorded commit."
+        return current, current, "CURRENT_LOCAL_ONLY", channel_issue(remote)
+    if not branch:
+        return current, None, "NOT_CONFIGURED", "Source update channel lacks repository, origin, branch, or commit evidence."
     completed = run_git(repository, "ls-remote", "--heads", "origin", branch)
     if completed.returncode or not completed.stdout.strip():
         detail = completed.stderr.strip() or "remote branch was not found"
@@ -302,7 +316,7 @@ def scan_guardian(layout: HostLayout, policy_path: Path | None = None, apply: bo
     canonical_time = parsed_time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     rows = [scan_record(record, policies.get(record.get("name"))) for record in records]
     add_dependency_changes(layout, rows)  # Compare only host-observed versions; candidate dependency files remain unproved.
-    states = ("CURRENT", "UPDATE_AVAILABLE", "AHEAD", "UNKNOWN", "NOT_CONFIGURED", "DISABLED")
+    states = ("CURRENT", "CURRENT_LOCAL_ONLY", "LOCAL_DRIFT", "UPDATE_AVAILABLE", "AHEAD", "UNKNOWN", "NOT_CONFIGURED", "DISABLED")
     summary = {
         "checked": len(rows),
         **{state: sum(row["updateStatus"] == state for row in rows) for state in states},
