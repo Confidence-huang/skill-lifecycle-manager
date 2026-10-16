@@ -83,7 +83,7 @@ class ManagerPromotionTests(unittest.TestCase):
 
         self.formal_source = self.root / "formal-source"
         git("clone", str(self.repository), str(self.formal_source), cwd=self.root)
-        git("checkout", "--detach", self.old_commit, cwd=self.formal_source)
+        git("checkout", "-B", "main", self.old_commit, cwd=self.formal_source)
         self.host.activity_root.mkdir(parents=True)
         self.activity = self.host.activity_root / "skill-lifecycle-manager"
         self.activity.symlink_to(self.formal_source, target_is_directory=True)
@@ -244,6 +244,26 @@ class ManagerPromotionTests(unittest.TestCase):
 
         self.assertEqual(tree_snapshot(self.root), before)
 
+    def test_stale_bundle_file_origin_blocks_the_preview(self) -> None:
+        stale = self.root / "stale-manager.bundle"
+        stale.write_bytes(b"not a real bundle\n")
+        git("remote", "set-url", "origin", str(stale), cwd=self.formal_source)
+        before = tree_snapshot(self.root)
+
+        with self.assertRaises(LifecycleBlocked):
+            preview_manager_promotion(self.plan_path, self.host)
+
+        self.assertEqual(tree_snapshot(self.root), before)
+
+    def test_detached_source_blocks_the_preview(self) -> None:
+        git("checkout", "--detach", self.old_commit, cwd=self.formal_source)
+        before = tree_snapshot(self.root)
+
+        with self.assertRaises(LifecycleBlocked):
+            preview_manager_promotion(self.plan_path, self.host)
+
+        self.assertEqual(tree_snapshot(self.root), before)
+
 
 @unittest.skipUnless(sys.platform.startswith("linux"), "Manager promotion recovery remains Linux-only.")
 class RealManagerPromotionTests(unittest.TestCase):
@@ -290,7 +310,7 @@ class RealManagerPromotionTests(unittest.TestCase):
 
         self.formal_source = self.root / "formal-source"
         git("clone", str(self.candidate_source), str(self.formal_source), cwd=self.root)
-        git("checkout", "--detach", self.old_commit, cwd=self.formal_source)
+        git("checkout", "-B", "main", self.old_commit, cwd=self.formal_source)
         self.host.activity_root.mkdir(parents=True)
         self.activity = self.host.activity_root / "skill-lifecycle-manager"
         self.activity.symlink_to(self.formal_source, target_is_directory=True)
@@ -429,6 +449,20 @@ class RealManagerPromotionTests(unittest.TestCase):
         self.assertEqual(result["action"], "MANAGER_PROMOTED")
         self.assertEqual(git("remote", "get-url", "origin", cwd=self.formal_source), update_remote)
         self.assertEqual(git("rev-parse", "HEAD", cwd=self.formal_source), self.new_commit)
+
+    def test_complete_upgrade_keeps_the_registry_update_channel(self) -> None:
+        update_remote = git("remote", "get-url", "origin", cwd=self.formal_source)
+
+        result = execute_manager_promotion(self.plan_path, self.host, apply=True)
+
+        self.assertEqual(result["action"], "MANAGER_PROMOTED")
+        self.assertEqual(git("symbolic-ref", "--short", "HEAD", cwd=self.formal_source), "main")
+        self.assertEqual(git("status", "--porcelain=v1", cwd=self.formal_source), "")
+        registry = json.loads(self.host.registry_path.read_text(encoding="utf-8"))
+        record = next(item for item in registry["skills"] if item["name"] == "skill-lifecycle-manager")
+        self.assertEqual(record["remote"], update_remote)
+        self.assertEqual(record["branch"], "main")
+        self.assertEqual(record["commit"], self.new_commit)
 
     def test_completed_upgrade_retry_is_zero_write(self) -> None:
         first = execute_manager_promotion(self.plan_path, self.host, apply=True)

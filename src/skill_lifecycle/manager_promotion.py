@@ -169,9 +169,32 @@ def _update_remote(formal_source: Path, carrier: Path) -> str:
     if not remote:
         raise LifecycleBlocked("Manager source has no origin update remote to retain.")
     candidate = Path(remote).expanduser()
-    if candidate.is_absolute() and candidate.resolve() == carrier.resolve():
-        raise LifecycleBlocked("Manager source origin already points at the promotion carrier.")
+    if candidate.is_absolute():
+        resolved = candidate.resolve()
+        if resolved == carrier.resolve():
+            raise LifecycleBlocked("Manager source origin already points at the promotion carrier.")
+        if resolved.is_file():
+            raise LifecycleBlocked(f"Manager source origin points at a local file, not an update channel: {resolved}")
     return remote
+
+
+def _source_branch(formal_source: Path) -> str:
+    """Resolve the branch the published source must stay attached to.
+
+    Registry freshness reports the checkout branch, so a detached source has already lost its
+    declared update channel: promotion refuses to start from one instead of publishing
+    `branch: null` for the host to discover later.
+    """
+    completed = subprocess.run(
+        ["git", "-C", str(formal_source), "symbolic-ref", "--short", "--quiet", "HEAD"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    branch = completed.stdout.strip()
+    if completed.returncode or not branch:
+        raise LifecycleBlocked("Manager source is detached; attach the declared branch before promoting.")
+    return branch
 
 
 def _inventory_count(registry_path: Path) -> int:
@@ -214,6 +237,7 @@ def preview_manager_promotion(plan_path: Path, host: HostLayout) -> dict[str, An
     if _git(formal_source, "status", "--porcelain=v1"):
         raise LifecycleBlocked("Formal manager source is dirty.")
     _update_remote(formal_source, carrier)
+    _source_branch(formal_source)
     if _git(candidate_source, "rev-parse", "HEAD") != plan["newCommit"]:
         raise LifecycleBlocked("Candidate source commit does not match newCommit.")
     if _git(candidate_source, "status", "--porcelain=v1"):
@@ -531,6 +555,7 @@ def execute_manager_promotion(
 
     preview = preview_manager_promotion(plan_path, host)
     update_remote = _update_remote(Path(plan["formalSource"]), _absolute_path(plan["carrierPath"], "carrierPath"))
+    update_branch = _source_branch(Path(plan["formalSource"]))
     recovery = Path(plan["recoveryRoot"])
     recovery.parent.mkdir(parents=True, exist_ok=True)
     recovery.mkdir()
@@ -559,8 +584,12 @@ def execute_manager_promotion(
         if not Path(plan["activityEntry"]).is_symlink() or Path(plan["activityEntry"]).resolve(strict=True) != formal_source:
             raise LifecycleBlocked("Activity entry did not preserve the canonical formal source path.")
         _run(["git", "-C", str(formal_source), "remote", "set-url", "origin", update_remote])
+        _run(["git", "-C", str(formal_source), "branch", "--force", update_branch, plan["newCommit"]])
+        _run(["git", "-C", str(formal_source), "checkout", update_branch])
         if _git(formal_source, "remote", "get-url", "origin") != update_remote:
             raise LifecycleBlocked("Promoted manager source did not retain its configured update remote.")
+        if _source_branch(formal_source) != update_branch:
+            raise LifecycleBlocked("Promoted manager source did not retain its declared branch.")
         steps.append({"name": "publish-source", "status": "PASS"})
         atomic_json(transaction_path, _transaction_record(plan, "IN_PROGRESS", steps))
 
