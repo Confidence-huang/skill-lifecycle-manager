@@ -158,6 +158,22 @@ def _receipt_source(receipt_path: Path) -> Path:
     return Path(matches[0]["editable"]).expanduser().resolve(strict=True)
 
 
+def _update_remote(formal_source: Path, carrier: Path) -> str:
+    """Resolve the one configured update remote the published source must keep.
+
+    Publication stages the successor from the offline carrier bundle, and a bundle clone names that
+    bundle as `origin`. Leaving it there would silently redirect every later `ls-remote` freshness
+    probe at the bundle file instead of the declared update channel.
+    """
+    remote = _git(formal_source, "remote", "get-url", "origin")
+    if not remote:
+        raise LifecycleBlocked("Manager source has no origin update remote to retain.")
+    candidate = Path(remote).expanduser()
+    if candidate.is_absolute() and candidate.resolve() == carrier.resolve():
+        raise LifecycleBlocked("Manager source origin already points at the promotion carrier.")
+    return remote
+
+
 def _inventory_count(registry_path: Path) -> int:
     """Read the canonical physical-entry count pinned by the promotion plan."""
     registry, _ = read_json_object(registry_path)
@@ -197,6 +213,7 @@ def preview_manager_promotion(plan_path: Path, host: HostLayout) -> dict[str, An
         raise LifecycleBlocked("Formal source commit does not match oldCommit.")
     if _git(formal_source, "status", "--porcelain=v1"):
         raise LifecycleBlocked("Formal manager source is dirty.")
+    _update_remote(formal_source, carrier)
     if _git(candidate_source, "rev-parse", "HEAD") != plan["newCommit"]:
         raise LifecycleBlocked("Candidate source commit does not match newCommit.")
     if _git(candidate_source, "status", "--porcelain=v1"):
@@ -513,6 +530,7 @@ def execute_manager_promotion(
         return completed
 
     preview = preview_manager_promotion(plan_path, host)
+    update_remote = _update_remote(Path(plan["formalSource"]), _absolute_path(plan["carrierPath"], "carrierPath"))
     recovery = Path(plan["recoveryRoot"])
     recovery.parent.mkdir(parents=True, exist_ok=True)
     recovery.mkdir()
@@ -540,6 +558,9 @@ def execute_manager_promotion(
         staged_source.rename(formal_source)
         if not Path(plan["activityEntry"]).is_symlink() or Path(plan["activityEntry"]).resolve(strict=True) != formal_source:
             raise LifecycleBlocked("Activity entry did not preserve the canonical formal source path.")
+        _run(["git", "-C", str(formal_source), "remote", "set-url", "origin", update_remote])
+        if _git(formal_source, "remote", "get-url", "origin") != update_remote:
+            raise LifecycleBlocked("Promoted manager source did not retain its configured update remote.")
         steps.append({"name": "publish-source", "status": "PASS"})
         atomic_json(transaction_path, _transaction_record(plan, "IN_PROGRESS", steps))
 
