@@ -423,6 +423,8 @@ def _completed_retry(plan: dict[str, Any], host: HostLayout) -> dict[str, Any] |
     formal_source = Path(plan["formalSource"])
     if _git(formal_source, "rev-parse", "HEAD") != plan["newCommit"] or _git(formal_source, "status", "--porcelain=v1"):
         raise LifecycleBlocked("Completed promotion retry found source drift.")
+    _source_branch(formal_source)
+    _update_remote(formal_source, _absolute_path(plan["carrierPath"], "carrierPath"))
     activity = Path(plan["activityEntry"])
     if not activity.is_symlink() or activity.resolve(strict=True) != formal_source:
         raise LifecycleBlocked("Completed promotion retry found activity drift.")

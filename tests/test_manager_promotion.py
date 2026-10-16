@@ -476,6 +476,20 @@ class RealManagerPromotionTests(unittest.TestCase):
         self.assertEqual(second["mutations"], 0)
         self.assertEqual(tree_snapshot(self.root), before)
 
+    def test_completed_upgrade_retry_rejects_a_detached_source(self) -> None:
+        execute_manager_promotion(self.plan_path, self.host, apply=True)
+        git("checkout", "--detach", self.new_commit, cwd=self.formal_source)
+
+        with self.assertRaises(LifecycleBlocked):
+            execute_manager_promotion(self.plan_path, self.host, apply=True)
+
+    def test_completed_upgrade_retry_rejects_a_carrier_origin(self) -> None:
+        execute_manager_promotion(self.plan_path, self.host, apply=True)
+        git("remote", "set-url", "origin", str(self.carrier), cwd=self.formal_source)
+
+        with self.assertRaises(LifecycleBlocked):
+            execute_manager_promotion(self.plan_path, self.host, apply=True)
+
     def test_failure_before_source_publication_restores_exact_preimages(self) -> None:
         result = execute_manager_promotion(
             self.plan_path,
